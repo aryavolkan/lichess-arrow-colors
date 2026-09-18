@@ -4,6 +4,11 @@ A small Chrome extension (Manifest V3) that colour-codes the engine suggestion
 arrows on [lichess.org](https://lichess.org), so you can tell the best line
 from the alternatives at a glance.
 
+![Engine arrows shaded green to red by how good each move is](store/screenshots/arrows-spread-1280x800.png)
+
+Black to move. The engine's best move is green, and the arrows shade through
+yellow and orange to red as the moves get worse.
+
 Lichess draws the best line in pale blue and every other multi-PV line in the
 same pale grey, so with 3 to 5 lines enabled you cannot tell which grey arrow
 is second best. This extension fixes that.
@@ -12,6 +17,10 @@ Lichess also draws weaker moves as thinner arrows. Colour already says how good
 a move is, so every arrow is drawn at the same width, and thinner than lichess's
 own. There is a width slider on the options page, and you can switch the whole
 thing off to get lichess's widths back.
+
+When every move is about equally good, nothing turns red:
+
+![Arrows all green in a position where every move is about equal](store/screenshots/arrows-equal-1280x800.png)
 
 ## Two colouring modes
 
