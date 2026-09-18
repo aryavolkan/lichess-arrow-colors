@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Lichess Arrow Colors",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Shades lichess.org engine suggestion arrows green to red by how good each move is.",
   "permissions": [
     "storage"

@@ -8,6 +8,9 @@
   const mode = document.getElementById('mode');
   const normalize = document.getElementById('normalize');
   const uniformWidth = document.getElementById('uniformWidth');
+  const widthOpts = document.getElementById('widthOpts');
+  const width = document.getElementById('width');
+  const widthValue = document.getElementById('widthValue');
   const border = document.getElementById('border');
   const borderOpts = document.getElementById('borderOpts');
   const borderColor = document.getElementById('borderColor');
@@ -32,6 +35,9 @@
     mode.value = s.mode;
     normalize.checked = s.normalize;
     uniformWidth.checked = s.uniformWidth;
+    width.value = s.width;
+    widthValue.value = Math.round(s.width * 64);
+    widthOpts.hidden = !s.uniformWidth;
     border.checked = s.border;
     borderColor.value = s.borderColor;
     borderWidth.value = s.borderWidth;
@@ -51,6 +57,7 @@
       mode: mode.value,
       normalize: normalize.checked,
       uniformWidth: uniformWidth.checked,
+      width: Number(width.value),
       border: border.checked,
       borderColor: borderColor.value,
       borderWidth: Number(borderWidth.value),
@@ -62,12 +69,14 @@
     evalHelp.hidden = s.mode !== 'eval';
     normalizeHelp.textContent = s.normalize ? HELP.on : HELP.off;
     borderWidthValue.value = s.borderWidth.toFixed(3);
+    widthValue.value = Math.round(s.width * 64);
+    widthOpts.hidden = !s.uniformWidth;
     borderOpts.hidden = !s.border;
     chrome.storage.sync.set(s);
   }
 
   chrome.storage.sync.get(DEFAULTS, stored => render({ ...DEFAULTS, ...stored }));
-  [enabled, mode, normalize, opacity, uniformWidth, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
+  [enabled, mode, normalize, opacity, uniformWidth, width, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
   document.getElementById('reset').addEventListener('click', () => {
     chrome.storage.sync.set({ ...DEFAULTS, colors: [...DEFAULTS.colors] });
     render(DEFAULTS);

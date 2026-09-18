@@ -152,7 +152,7 @@
     line.setAttribute('opacity', '1');
     // Measure from lichess's own width, not from a width we already set, or
     // turning this off would leave the arrows at the size we gave them.
-    const width = arrowStrokeWidth(parseStrokeWidth(origAttr(line, 'stroke-width')), settings.uniformWidth);
+    const width = arrowStrokeWidth(parseStrokeWidth(origAttr(line, 'stroke-width')), settings.uniformWidth, settings.width);
     if (width) line.setAttribute('stroke-width', String(width));
   }
 
@@ -189,7 +189,7 @@
           if (g.hasAttribute('data-lac')) restore(g);
           return;
         }
-        const stamp = [color, settings.opacity, settings.uniformWidth, settings.border, settings.borderColor, settings.borderWidth].join(':');
+        const stamp = [color, settings.opacity, settings.uniformWidth, settings.width, settings.border, settings.borderColor, settings.borderWidth].join(':');
         if (g.getAttribute('data-lac') === stamp) return;
         g.setAttribute('data-lac', stamp);
         clearBorders(g);

@@ -8,10 +8,10 @@
   const BEST_BRUSH = 'paleBlue';
   const ALT_BRUSH = 'paleGrey';
 
-  // chessground's paleBlue/paleGrey brushes are lineWidth 15 and it divides by
-  // 64 for board units. Thinner arrows come from a per-line modifier, which is
-  // what we flatten when every arrow should be the same size.
-  const UNIFORM_WIDTH = 15 / 64;
+  // chessground works in board units where one square is 1, and builds its
+  // widths as lineWidth / 64. Its full-strength arrow is 15; thinner arrows
+  // come from a per-line modifier, which is what we flatten.
+  const CG_WIDTH_UNIT = 1 / 64;
 
   // Loss in winning chances (0..1) at which an arrow is fully red on the
   // absolute scale. Lichess stops drawing alternative arrows beyond this loss.
@@ -34,6 +34,8 @@
     // Give every engine arrow the same width. Colour already says how good a
     // move is, so lichess's thinning of weaker lines only adds noise.
     uniformWidth: true,
+    // Thinner than lichess's full-strength arrow, which is 15 units.
+    width: 9 * CG_WIDTH_UNIT,
     border: true,
     borderColor: '#000000',
     borderWidth: 0.03,
@@ -162,8 +164,9 @@
   const CG_HEAD = Object.freeze({ tipX: 3, refX: 2.05, refY: 2 });
 
   /** The width to draw an arrow at: one size for all, or lichess's own. */
-  function arrowStrokeWidth(currentWidth, uniform) {
-    return uniform ? UNIFORM_WIDTH : currentWidth;
+  function arrowStrokeWidth(currentWidth, uniform, width) {
+    if (!uniform) return currentWidth;
+    return width > 0 ? width : DEFAULTS.width;
   }
 
   /**
@@ -233,7 +236,7 @@
   const api = {
     parseCgHash, pvKeys, rankArrows, colorForRank,
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
-    parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, UNIFORM_WIDTH,
+    parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

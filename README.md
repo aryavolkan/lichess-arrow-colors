@@ -9,8 +9,9 @@ same pale grey, so with 3 to 5 lines enabled you cannot tell which grey arrow
 is second best. This extension fixes that.
 
 Lichess also draws weaker moves as thinner arrows. Colour already says how good
-a move is, so every arrow is drawn at the same width. You can turn that off on
-the options page and get lichess's widths back.
+a move is, so every arrow is drawn at the same width, and thinner than lichess's
+own. There is a width slider on the options page, and you can switch the whole
+thing off to get lichess's widths back.
 
 ## Two colouring modes
 
@@ -81,7 +82,7 @@ Colours and opacity can be changed from the extension's options page
   width from the same quantity.
 - Widths come from a per-line modifier in the same `cgHash`. The extension
   reads and stores lichess's original width, then draws every arrow at the
-  width lichess uses for a full-strength one.
+  chosen width. Widths are in chessground's unit, a 64th of a square.
 - The outline is a wider copy of the arrow drawn underneath it, which gives the
   shaft an even edge. The arrowhead needs more care: chessground scales the head
   with the line's stroke width, so a wider copy would inflate the head rather
