@@ -43,15 +43,20 @@ How the colour is worked out:
 
 Other things it does:
 
+- Draws the rest of the engine's best line, which lichess leaves off the board
+  entirely: lichess draws only the first move of each line. The extra moves are
+  drawn in a darker shade of the same green and finely striped on the diagonal,
+  so you can always tell them from the arrows lichess itself draws. Five moves
+  deep by default, adjustable up to eight, or off.
 - Draws every arrow at the same width. Lichess thins the weaker ones, but the
   colour already says that, so the widths only added noise.
 - Outlines the arrows so they stay readable over pieces and over light and dark
   squares.
 
 Everything is adjustable on the options page: the colours, the outline, the
-arrow width, the opacity, and whether the scale stretches per position. There
-is also a second mode that colours arrows by their rank in the engine list
-instead, with a fixed palette you can edit.
+arrow width, the opacity, how much of the best line is drawn, and whether the
+scale stretches per position. There is also a second mode that colours arrows
+by their rank in the engine list instead, with a fixed palette you can edit.
 
 Turn the extension off and lichess's own arrows come back exactly as they were.
 

@@ -17,6 +17,10 @@
   const borderWidth = document.getElementById('borderWidth');
   const borderWidthValue = document.getElementById('borderWidthValue');
   const normalizeHelp = document.getElementById('normalizeHelp');
+  const lineDepth = document.getElementById('lineDepth');
+  const lineDepthValue = document.getElementById('lineDepthValue');
+
+  const depthLabel = n => (n > 0 ? String(n) : 'off');
 
   const HELP = {
     on: "The best move is green and the weakest arrow on the board is red, whatever the gap between them. Small differences stay green when every move is about equally good.",
@@ -34,6 +38,8 @@
     enabled.checked = s.enabled;
     mode.value = s.mode;
     normalize.checked = s.normalize;
+    lineDepth.value = s.lineDepth;
+    lineDepthValue.value = depthLabel(s.lineDepth);
     uniformWidth.checked = s.uniformWidth;
     width.value = s.width;
     widthValue.value = Math.round(s.width * 64);
@@ -56,6 +62,7 @@
       enabled: enabled.checked,
       mode: mode.value,
       normalize: normalize.checked,
+      lineDepth: Number(lineDepth.value),
       uniformWidth: uniformWidth.checked,
       width: Number(width.value),
       border: border.checked,
@@ -65,6 +72,7 @@
       colors: colorInputs.map(i => i.value),
     };
     opacityValue.value = s.opacity.toFixed(2);
+    lineDepthValue.value = depthLabel(s.lineDepth);
     rankColors.hidden = s.mode !== 'rank';
     evalHelp.hidden = s.mode !== 'eval';
     normalizeHelp.textContent = s.normalize ? HELP.on : HELP.off;
@@ -76,7 +84,7 @@
   }
 
   chrome.storage.sync.get(DEFAULTS, stored => render({ ...DEFAULTS, ...stored }));
-  [enabled, mode, normalize, opacity, uniformWidth, width, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
+  [enabled, mode, normalize, lineDepth, opacity, uniformWidth, width, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
   document.getElementById('reset').addEventListener('click', () => {
     chrome.storage.sync.set({ ...DEFAULTS, colors: [...DEFAULTS.colors] });
     render(DEFAULTS);

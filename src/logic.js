@@ -22,6 +22,16 @@
   // spread over differences that do not matter.
   const MIN_SPAN = 0.05;
 
+  // The deepest continuation arrow is drawn at this fraction of the opacity
+  // the first move gets, whatever depth the line is drawn to. Kept shallow:
+  // the stripes and the darker green already say which arrows these are, and
+  // fading hard on top of that washes the colour out to grey.
+  const LINE_FADE_FLOOR = 0.75;
+
+  // Half a square: chessground's board units put the centre of the board at
+  // (0, 0), so a1's centre is 3.5 squares out along both axes.
+  const HALF_BOARD = 3.5;
+
   const DEFAULTS = Object.freeze({
     enabled: true,
     // 'eval': green→red by loss vs the best line. 'rank': fixed palette by PV rank.
@@ -29,6 +39,9 @@
     // Stretch the eval gradient across the losses present in this position
     // instead of the fixed 0..MAX_SHIFT scale.
     normalize: true,
+    // How many moves of the best line to draw past the one lichess draws
+    // itself. 0 leaves the board as lichess has it.
+    lineDepth: 5,
     // Outline drawn under each arrow. borderWidth is per side, in board units
     // where one square is 1 (chessground's own stroke-width unit).
     // Give every engine arrow the same width. Colour already says how good a
@@ -248,6 +261,219 @@
       .sort((i, j) => arrowLength(arrows[j]) - arrowLength(arrows[i]));
   }
 
+  /**
+   * The moves of the best line that lichess does not draw, from its second
+   * move on: `raw` is the line's moves in order, as plain UCI or lichess's
+   * own "fen|uci" data-board values, starting with the move lichess already
+   * has an arrow for.
+   *
+   * A move whose arrow is on the board already is skipped, so a line that
+   * shuffles a piece back and forth keeps only its first, least faded arrow,
+   * and a continuation that happens to be another line's first move is left
+   * in that line's own colour. A move we cannot read ends the line rather
+   * than being stepped over, since everything after it would be drawn at the
+   * wrong depth.
+   */
+  function continuationMoves(raw, depth, taken) {
+    const out = [];
+    if (!Array.isArray(raw) || !(depth > 0)) return out;
+    const seen = new Set(taken || []);
+    for (let ply = 1; ply < raw.length && ply <= depth; ply++) {
+      const key = pvKeys([raw[ply]])[0];
+      if (!key) break;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ orig: key.slice(0, 2), dest: key.slice(2, 4), key, ply });
+    }
+    return out;
+  }
+
+  /**
+   * The centre of a square in chessground's board units, where a square is 1
+   * and the centre of the board is (0, 0). y grows downwards, as in any SVG,
+   * so rank 8 is negative. A flipped board is the same map negated.
+   */
+  function squarePoint(square, flipped) {
+    if (!SQUARE.test(square || '')) return null;
+    const file = square.charCodeAt(0) - 97;
+    const rank = square.charCodeAt(1) - 49;
+    const x = file - HALF_BOARD;
+    const y = HALF_BOARD - rank;
+    return flipped ? { x: -x, y: -y } : { x, y };
+  }
+
+  // Board units of slack when matching an arrow's start against a square
+  // centre. The two orientations put it 1 to 7 squares apart, so this only
+  // has to absorb rounding.
+  const CALIBRATE_TOL = 0.01;
+
+  /**
+   * Work out how to place an arrow from one lichess has already drawn:
+   * which way round the board is, and how far short of the destination
+   * chessground stops the line to leave room for the arrowhead.
+   *
+   * Reading both off a real arrow means the arrows we add line up with
+   * lichess's own even if chessground changes its geometry.
+   */
+  function calibrate(ref) {
+    if (!ref || !ref.dest) return null;
+    for (const flipped of [false, true]) {
+      const from = squarePoint(ref.orig, flipped);
+      const to = squarePoint(ref.dest, flipped);
+      if (!from || !to) return null;
+      if (Math.abs(from.x - ref.x1) > CALIBRATE_TOL || Math.abs(from.y - ref.y1) > CALIBRATE_TOL) continue;
+      const full = Math.hypot(to.x - from.x, to.y - from.y);
+      const drawn = Math.hypot(ref.x2 - ref.x1, ref.y2 - ref.y1);
+      // Rounded off: the difference is a fixed fraction of a square, and the
+      // coordinates it comes from carry float noise.
+      const margin = Math.max(0, Math.round((full - drawn) * 1e6) / 1e6);
+      return { flipped, margin };
+    }
+    return null;
+  }
+
+  /**
+   * Where to draw an arrow between two squares, shortened at the destination
+   * by the arrowhead margin. Null when the arrow would be no longer than its
+   * own head.
+   */
+  function arrowEndpoints(orig, dest, cal) {
+    if (!cal) return null;
+    const from = squarePoint(orig, cal.flipped);
+    const to = squarePoint(dest, cal.flipped);
+    if (!from || !to) return null;
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const len = Math.hypot(dx, dy);
+    if (!(len > cal.margin)) return null;
+    return {
+      x1: from.x,
+      y1: from.y,
+      x2: to.x - (dx / len) * cal.margin,
+      y2: to.y - (dy / len) * cal.margin,
+    };
+  }
+
+  // A stripe is this many times as long as the gap that follows it.
+  const STRIPE_RATIO = 2;
+
+  // Gap length as a fraction of the arrow's width, before the stripes are
+  // stretched to fit the shaft. Fine stripes: several to a one-square arrow.
+  const STRIPE_UNIT = 0.5;
+
+  // How much of its lightness a continuation arrow keeps against the move
+  // lichess draws itself. Dark enough to tell the two apart at a glance,
+  // not so dark that it stops reading as the same green.
+  const DARKEN = 0.6;
+
+  // How far the stripes lean off square, in degrees. A shear this size cuts
+  // plainly on the diagonal while still crossing the shaft rather than
+  // running away down it.
+  const STRIPE_ANGLE = 25;
+
+
+  /**
+   * Stripes for one shaft: as many whole stripes as fit at about one stripe
+   * per arrow width, stretched so that n stripes and the n-1 gaps between
+   * them span the shaft exactly. Fitting them to the shaft rather than
+   * repeating a fixed dash is what keeps a stripe from being cut off partway
+   * at the arrowhead, which reads as an arrow that failed to draw.
+   */
+  function stripePattern(width, length) {
+    if (!(width > 0) || !(length > 0)) return null;
+    const unit = STRIPE_UNIT * width;
+    const n = Math.max(1, Math.round((length + unit) / ((STRIPE_RATIO + 1) * unit)));
+    const gap = length / ((STRIPE_RATIO + 1) * n - 1);
+    return [STRIPE_RATIO * gap, gap];
+  }
+
+  /**
+   * A transform that leans an arrow's stripes over.
+   *
+   * Dashes always cut square across a line, so the cut is sheared instead:
+   * a shear along the arrow's own axis slides each point sideways in
+   * proportion to how far off the axis it lies. Points on the axis do not
+   * move and neither does the distance off it, so the arrow keeps its place,
+   * its length and its width, and only the ends of each stripe lean over.
+   *
+   * Written out as a matrix rather than a rotate/skew/rotate list, because
+   * SVG's skewX shears about the origin: composed with rotations about the
+   * arrow's start, it would still shear about a point the arrow's own
+   * distance from the origin and slide the whole shaft along itself.
+   */
+  function stripeTransform(x1, y1, x2, y2, angle) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (!len) return null;
+    const c = dx / len, s = dy / len;
+    const k = Math.tan((angle * Math.PI) / 180);
+    // Shear about the arrow's own direction, with the start point fixed.
+    const a = 1 - k * c * s, b = -k * s * s;
+    const cc = k * c * c, d = 1 + k * c * s;
+    const e = x1 - (a * x1 + cc * y1);
+    const f = y1 - (b * x1 + d * y1);
+    // Unrounded: rounding the matrix would nudge the arrow off its own
+    // squares by a fraction of the rounding, for nothing saved.
+    return `matrix(${[a, b, cc, d, e, f].join(' ')})`;
+  }
+
+  /**
+   * Split an arrow where the arrowhead's back edge falls: the shaft, which
+   * carries the stripes, and the piece the head covers, which carries the
+   * marker.
+   *
+   * The two are drawn separately for two reasons. The shear that leans the
+   * stripes over would lean the head with them if they shared a line; and
+   * stripes running on under the head would be cut off by it wherever they
+   * happened to fall. chessground anchors the head refX stroke widths back
+   * from the line's end, so that is where the shaft stops.
+   *
+   * An arrow with no room for a shaft is left to the head alone.
+   */
+  function splitAtHead(x1, y1, x2, y2, width) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (!len) return null;
+    const head = Math.min(CG_HEAD.refX * (width > 0 ? width : 0), len);
+    const t = (len - head) / len;
+    const at = { x: x1 + dx * t, y: y1 + dy * t };
+    return {
+      shaft: t > 0 ? { x1, y1, x2: at.x, y2: at.y } : null,
+      head: { x1: at.x, y1: at.y, x2, y2 },
+    };
+  }
+
+  /**
+   * A darker shade of a colour, for the arrows the extension adds itself.
+   * Understands the two forms the colours come in: the gradient's `hsl()`,
+   * whose lightness comes down directly, and the rank palette's hex, whose
+   * channels are dimmed. Anything else is handed back untouched.
+   */
+  function darker(color, factor) {
+    const f = factor === undefined ? DARKEN : factor;
+    if (typeof color !== 'string') return color;
+    let m = /^hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)$/.exec(color);
+    if (m) return `hsl(${m[1]}, ${m[2]}%, ${Math.round(Number(m[3]) * f)}%)`;
+    m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color);
+    if (m) {
+      const hex = m[1].length === 3 ? m[1].replace(/./g, c => c + c) : m[1];
+      const ch = i => Math.round(parseInt(hex.slice(i * 2, i * 2 + 2), 16) * f);
+      return '#' + [0, 1, 2].map(i => ch(i).toString(16).padStart(2, '0')).join('');
+    }
+    return color;
+  }
+
+  /**
+   * Opacity for a move `ply` steps down the line. The move lichess draws
+   * keeps the full setting and the deepest arrow always lands on the same
+   * floor, so the fade reads the same whether the line is one move long or
+   * eight.
+   */
+  function depthOpacity(ply, depth, base) {
+    if (!(ply > 0) || !(depth > 0)) return base;
+    const t = Math.min(1, ply / depth);
+    return base * (1 - (1 - LINE_FADE_FLOOR) * t);
+  }
+
   function colorForRank(rank, palette) {
     if (rank < 0 || !palette || !palette.length) return null;
     return palette[Math.min(rank, palette.length - 1)];
@@ -257,7 +483,9 @@
     parseCgHash, pvKeys, rankArrows, colorForRank, arrowLength, drawOrder,
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
     parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
-    DEFAULTS, MAX_SHIFT, MIN_SPAN, BEST_BRUSH, ALT_BRUSH,
+    continuationMoves, squarePoint, calibrate, arrowEndpoints, depthOpacity,
+    stripePattern, stripeTransform, splitAtHead, darker, STRIPE_ANGLE,
+    DEFAULTS, MAX_SHIFT, MIN_SPAN, LINE_FADE_FLOOR, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LAC = api;

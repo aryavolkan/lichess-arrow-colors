@@ -350,3 +350,247 @@ test('drawOrder puts circles and unreadable shapes on top of every arrow', () =>
   ];
   assert.deepEqual(drawOrder(arrows), [1, 0, 2]);
 });
+
+// ---- the rest of the best line -----------------------------------------
+const { continuationMoves, squarePoint, calibrate, arrowEndpoints, depthOpacity, LINE_FADE_FLOOR } = require('../src/logic.js');
+
+test('continuationMoves returns the line after the move lichess already draws', () => {
+  const line = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5'];
+  assert.deepEqual(continuationMoves(line, 3, []), [
+    { orig: 'e7', dest: 'e5', key: 'e7e5', ply: 1 },
+    { orig: 'g1', dest: 'f3', key: 'g1f3', ply: 2 },
+    { orig: 'b8', dest: 'c6', key: 'b8c6', ply: 3 },
+  ]);
+});
+
+test('continuationMoves reads lichess\'s fen|uci form and promotions', () => {
+  const line = ['8/4P3/8|e2e4', 'rn/pp|e7e8q'];
+  assert.deepEqual(continuationMoves(line, 2, []), [{ orig: 'e7', dest: 'e8', key: 'e7e8', ply: 1 }]);
+});
+
+test('continuationMoves draws nothing at depth 0, and nothing for a one-move line', () => {
+  assert.deepEqual(continuationMoves(['e2e4', 'e7e5'], 0, []), []);
+  assert.deepEqual(continuationMoves(['e2e4'], 3, []), []);
+  assert.deepEqual(continuationMoves([], 3, []), []);
+  assert.deepEqual(continuationMoves(null, 3, []), []);
+});
+
+test('continuationMoves skips moves already drawn on the board', () => {
+  const line = ['e2e4', 'g8f6', 'b1c3', 'd7d5'];
+  // g8f6 is an alternative line's own arrow, so lichess draws it already.
+  assert.deepEqual(continuationMoves(line, 3, ['e2e4', 'g8f6']), [
+    { orig: 'b1', dest: 'c3', key: 'b1c3', ply: 2 },
+    { orig: 'd7', dest: 'd5', key: 'd7d5', ply: 3 },
+  ]);
+});
+
+test('continuationMoves keeps the shallower arrow when a piece shuffles back', () => {
+  const line = ['e2e4', 'b8c6', 'g1f3', 'c6b8', 'b8c6'];
+  assert.deepEqual(continuationMoves(line, 4, []).map(m => m.key), ['b8c6', 'g1f3', 'c6b8']);
+});
+
+test('continuationMoves stops at a move it cannot read, rather than skipping it', () => {
+  const line = ['e2e4', 'e7e5', 'P@d4', 'g1f3'];
+  assert.deepEqual(continuationMoves(line, 4, []).map(m => m.key), ['e7e5']);
+});
+
+test('squarePoint maps squares onto chessground\'s board units', () => {
+  assert.deepEqual(squarePoint('a1', false), { x: -3.5, y: 3.5 });
+  assert.deepEqual(squarePoint('h8', false), { x: 3.5, y: -3.5 });
+  assert.deepEqual(squarePoint('e2', false), { x: 0.5, y: 2.5 });
+  assert.deepEqual(squarePoint('a1', true), { x: 3.5, y: -3.5 });
+  assert.deepEqual(squarePoint('e2', true), { x: -0.5, y: -2.5 });
+  assert.equal(squarePoint('j9', false), null);
+});
+
+test('calibrate reads board orientation and arrowhead margin off a drawn arrow', () => {
+  // e2->e4 white POV: (0.5, 2.5) to (0.5, 0.5), drawn 0.2 short for the head.
+  assert.deepEqual(calibrate({ orig: 'e2', dest: 'e4', x1: 0.5, y1: 2.5, x2: 0.5, y2: 0.7 }), { flipped: false, margin: 0.2 });
+});
+
+test('calibrate spots a flipped board', () => {
+  const c = calibrate({ orig: 'e2', dest: 'e4', x1: -0.5, y1: -2.5, x2: -0.5, y2: -0.7 });
+  assert.equal(c.flipped, true);
+  assert.ok(Math.abs(c.margin - 0.2) < 1e-9);
+});
+
+test('calibrate rejects an arrow that matches neither orientation', () => {
+  assert.equal(calibrate({ orig: 'e2', dest: 'e4', x1: 99, y1: 0, x2: 0, y2: 0 }), null);
+  assert.equal(calibrate({ orig: 'e2', dest: null, x1: 0.5, y1: 2.5, x2: 0.5, y2: 0.7 }), null);
+  assert.equal(calibrate(null), null);
+});
+
+test('arrowEndpoints draws from square to square, less the arrowhead margin', () => {
+  const e = arrowEndpoints('e2', 'e4', { flipped: false, margin: 0.2 });
+  assert.deepEqual(e, { x1: 0.5, y1: 2.5, x2: 0.5, y2: 0.7 });
+});
+
+test('arrowEndpoints takes the margin along the arrow, whatever its angle', () => {
+  const e = arrowEndpoints('a1', 'c2', { flipped: false, margin: 0.5 });
+  const dx = e.x2 - e.x1, dy = e.y2 - e.y1;
+  assert.ok(Math.abs(Math.hypot(dx, dy) - (Math.hypot(2, 1) - 0.5)) < 1e-9);
+  // Same direction as the full move: down-board and to the right.
+  assert.ok(dx > 0 && dy < 0);
+});
+
+test('arrowEndpoints survives an arrow shorter than the margin', () => {
+  assert.equal(arrowEndpoints('e2', 'e3', { flipped: false, margin: 2 }), null);
+  assert.equal(arrowEndpoints('e2', 'e2', { flipped: false, margin: 0.2 }), null);
+  assert.equal(arrowEndpoints('e2', 'e4', null), null);
+});
+
+test('depthOpacity fades down the line to the same floor at any depth', () => {
+  assert.equal(depthOpacity(0, 3, 0.6), 0.6);
+  assert.ok(depthOpacity(1, 3, 0.6) > depthOpacity(2, 3, 0.6));
+  assert.ok(depthOpacity(2, 3, 0.6) > depthOpacity(3, 3, 0.6));
+  assert.ok(Math.abs(depthOpacity(3, 3, 0.6) - 0.6 * LINE_FADE_FLOOR) < 1e-9);
+  assert.ok(Math.abs(depthOpacity(8, 8, 0.6) - 0.6 * LINE_FADE_FLOOR) < 1e-9);
+});
+
+test('depthOpacity keeps the deepest arrow visible', () => {
+  assert.ok(depthOpacity(8, 8, DEFAULTS.opacity) > 0.15);
+  assert.ok(LINE_FADE_FLOOR > 0 && LINE_FADE_FLOOR < 1);
+});
+
+
+const { stripePattern } = require('../src/logic.js');
+
+test('stripePattern fits whole stripes to the shaft, flush at both ends', () => {
+  const len = 1.2;
+  const [on, off] = stripePattern(0.14, len);
+  // n stripes and n-1 gaps span the shaft exactly.
+  const n = (len + off) / (on + off);
+  assert.ok(Math.abs(n - Math.round(n)) < 1e-9, `whole number of stripes, got ${n}`);
+  assert.ok(Math.round(n) >= 2, 'more than one stripe on a shaft this long');
+  assert.ok(on > off, 'stripes, not dots');
+});
+
+test('stripePattern paints a shaft too short to stripe solid instead', () => {
+  const [on] = stripePattern(0.14, 0.2);
+  assert.ok(on >= 0.2, 'one stripe, covering the whole shaft');
+});
+
+test('stripePattern scales the stripes with the arrow width', () => {
+  assert.ok(stripePattern(0.3, 2)[0] > stripePattern(0.1, 2)[0]);
+});
+
+test('stripePattern has nothing to stripe without a width or a length', () => {
+  assert.equal(stripePattern(0, 1), null);
+  assert.equal(stripePattern(0.14, 0), null);
+  assert.equal(stripePattern(null, null), null);
+});
+
+const { stripeTransform, splitAtHead, STRIPE_ANGLE } = require('../src/logic.js');
+
+test('STRIPE_ANGLE cuts across the arrow, neither square to it nor along it', () => {
+  assert.ok(STRIPE_ANGLE > 10 && STRIPE_ANGLE < 60);
+});
+
+const applyTransform = (t, x, y) => {
+  const [a, b, c, d, e, f] = t.match(/matrix\(([^)]*)\)/)[1].trim().split(/[\s,]+/).map(Number);
+  return { x: a * x + c * y + e, y: b * x + d * y + f };
+};
+
+test('stripeTransform leaves the arrow itself exactly where it was', () => {
+  for (const [x1, y1, x2, y2] of [[1.5, 1.5, 3.36, 0.57], [0.5, 2.5, 0.5, 0.5], [-3.5, -0.5, 1, 2], [0, 0, 2, 0]]) {
+    const t = stripeTransform(x1, y1, x2, y2, STRIPE_ANGLE);
+    const tail = applyTransform(t, x1, y1), head = applyTransform(t, x2, y2);
+    assert.ok(Math.abs(tail.x - x1) < 1e-9 && Math.abs(tail.y - y1) < 1e-9, `tail moved to ${tail.x},${tail.y}`);
+    assert.ok(Math.abs(head.x - x2) < 1e-9 && Math.abs(head.y - y2) < 1e-9, `head moved to ${head.x},${head.y}`);
+  }
+});
+
+test('stripeTransform slides the shaft edge along the arrow, which leans the cut', () => {
+  // Pointing along +x. A point half a unit off the arrow's side slides along
+  // the arrow by that much times tan(angle), and stays the same distance off
+  // it: that is what turns a square cut into a diagonal one without moving
+  // the shaft's long edges.
+  const t = stripeTransform(1, 2, 3, 2, 25);
+  const p = applyTransform(t, 1, 2.5);
+  assert.ok(Math.abs(p.y - 2.5) < 1e-9, 'edge stays where it was');
+  assert.ok(Math.abs(p.x - (1 + 0.5 * Math.tan((25 * Math.PI) / 180))) < 1e-9, 'edge slides along the arrow');
+});
+
+test('stripeTransform leans every arrow by the same angle, whatever its direction', () => {
+  const lean = (x1, y1, x2, y2) => {
+    const t = stripeTransform(x1, y1, x2, y2, STRIPE_ANGLE);
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    const n = { x: -(y2 - y1) / len, y: (x2 - x1) / len };   // half a unit off the side
+    const p = applyTransform(t, x1 + n.x * 0.5, y1 + n.y * 0.5);
+    // How far it slid along the arrow.
+    return ((p.x - x1 - n.x * 0.5) * (x2 - x1) + (p.y - y1 - n.y * 0.5) * (y2 - y1)) / len;
+  };
+  const slide = 0.5 * Math.tan((STRIPE_ANGLE * Math.PI) / 180);
+  for (const a of [[0, 0, 2, 0], [0.5, 2.5, 0.5, 0.5], [1.5, 1.5, 3.36, 0.57], [3, 3, -1, -2]]) {
+    assert.ok(Math.abs(lean(...a) - slide) < 1e-9, `leaned by ${lean(...a)}, wanted ${slide}`);
+  }
+});
+
+test('stripeTransform has nothing to shear without an arrow', () => {
+  assert.equal(stripeTransform(1, 1, 1, 1, 20), null);
+});
+
+test('splitAtHead hands the arrowhead the piece of line it covers', () => {
+  // chessground's head reaches CG_HEAD.refX stroke widths back from the tip.
+  const back = CG_HEAD.refX * 0.2;
+  const s = splitAtHead(0, 0, 3, 0, 0.2);
+  assert.ok(Math.abs(s.head.x1 - (3 - back)) < 1e-9);
+  assert.equal(s.head.x2, 3);
+  assert.equal(s.shaft.x1, 0);
+  assert.ok(Math.abs(s.shaft.x2 - s.head.x1) < 1e-9, 'shaft ends where the head starts');
+});
+
+test('splitAtHead keeps a diagonal arrow\'s direction', () => {
+  const s = splitAtHead(0, 0, 3, 4, 0.2);
+  const len = Math.hypot(s.head.x2 - s.head.x1, s.head.y2 - s.head.y1);
+  assert.ok(Math.abs(len - CG_HEAD.refX * 0.2) < 1e-9);
+  assert.ok(Math.abs(s.head.y1 / s.head.x1 - 4 / 3) < 1e-9);
+});
+
+test('splitAtHead leaves no shaft on an arrow the head fills by itself', () => {
+  const s = splitAtHead(0, 0, 0.3, 0, 0.2);
+  assert.equal(s.shaft, null);
+  assert.deepEqual(s.head, { x1: 0, y1: 0, x2: 0.3, y2: 0 });
+});
+
+test('splitAtHead has nothing to split without an arrow', () => {
+  assert.equal(splitAtHead(1, 1, 1, 1, 0.2), null);
+  assert.equal(stripeTransform(0, 0, 0, 0, 20), null);
+});
+
+test('DEFAULTS draws five moves of the best line', () => {
+  assert.equal(DEFAULTS.lineDepth, 5);
+});
+
+const { darker } = require('../src/logic.js');
+
+test('darker keeps an hsl colour\'s hue and saturation and takes its lightness down', () => {
+  const [h, s, l] = darker('hsl(120, 75%, 42%)')
+    .match(/^hsl\(([\d.]+), ([\d.]+)%, ([\d.]+)%\)$/).slice(1).map(Number);
+  assert.equal(h, 120);
+  assert.equal(s, 75);
+  assert.ok(l > 0 && l < 42, `lightness ${l}`);
+});
+
+test('darker dims every channel of a hex colour, and keeps it green', () => {
+  const out = darker('#22c55e');
+  assert.match(out, /^#[0-9a-f]{6}$/);
+  const ch = i => parseInt(out.slice(1 + i * 2, 3 + i * 2), 16);
+  assert.ok(ch(0) < 0x22 && ch(1) < 0xc5 && ch(2) < 0x5e);
+  assert.ok(ch(1) > ch(0) && ch(1) > ch(2), 'green still dominates');
+});
+
+test('darker writes a short hex out in full', () => {
+  assert.match(darker('#fff'), /^#[0-9a-f]{6}$/);
+});
+
+test('darker leaves a colour it cannot read alone', () => {
+  assert.equal(darker('rebeccapurple'), 'rebeccapurple');
+  assert.equal(darker(null), null);
+});
+
+test('stripePattern puts several stripes on a one-square shaft', () => {
+  const [on, off] = stripePattern(DEFAULTS.width, 0.85);
+  const n = Math.round((0.85 + off) / (on + off));
+  assert.ok(n >= 3, `only ${n} stripes on a one-square arrow`);
+});

@@ -7,7 +7,8 @@ from the alternatives at a glance.
 ![Engine arrows shaded green to red by how good each move is](store/screenshots/arrows-spread-1280x800.png)
 
 Black to move. The engine's best move is green, and the arrows shade through
-yellow and orange to red as the moves get worse.
+yellow and orange to red as the moves get worse. The striped green arrows are
+the rest of the best line, which lichess does not draw at all.
 
 Lichess draws the best line in pale blue and every other multi-PV line in the
 same pale grey, so with 3 to 5 lines enabled you cannot tell which grey arrow
@@ -62,6 +63,31 @@ whole way round, including the arrowhead, and adding it does not change the
 size of the arrow itself. Its colour and thickness are adjustable. Turn it off on the
 options page if you prefer lichess's plain arrows.
 
+## The rest of the best line
+
+Lichess draws one arrow per engine line, for its first move only. This draws
+the moves after it as well, in a darker shade of the same green, so you can
+see where the best line is going and not just how it starts. The arrows fade a
+little as the line goes on, which keeps the move you actually have to play the
+brightest thing on the board, and the deepest arrow lands on the same shade
+whether you are showing one move of the line or eight.
+
+Both sides' moves are drawn, since a line only makes sense with the replies in
+it. Five moves past the first are drawn by default; the slider on the options
+page goes up to eight, and zero turns the whole thing off.
+
+These arrows are finely striped, since they are the one thing on the board
+lichess did not put there: a solid arrow is always a move an engine line
+starts with, and a striped one is always a move further down the best line.
+The stripes are cut on the diagonal, which reads as deliberate at a glance
+where a square cut looks like an arrow that failed to draw. The arrowhead
+stays solid and square to the arrow, so the direction still reads.
+
+A move whose arrow is already on the board is skipped. So a line that shuffles
+a piece back and forth keeps only its first, brightest arrow, and a
+continuation that happens to also be another line's first move is left in that
+line's own colour rather than being drawn over.
+
 ## Overlapping arrows
 
 Arrows are drawn longest first, so where two cross, the shorter one lies on
@@ -95,6 +121,44 @@ Colours and opacity can be changed from the extension's options page
 - When a row's evaluation is not shown (lichess hides it with a single engine
   line), the arrow's line width is used instead, since lichess derives that
   width from the same quantity.
+- Lichess gives every move of a line its own `.pv-san` element carrying
+  `fen|uci` for the board it previews on hover, so the whole best line is
+  readable from the engine panel. The moves past the first are arrows the
+  extension creates: lichess never draws them.
+- Placing a new arrow needs the board's geometry, which the extension measures
+  off an arrow lichess has already drawn rather than hardcoding chessground's
+  numbers. That arrow's `cgHash` names its squares and its `x1`/`y1` say where
+  the first of them sits, which also settles which way round the board is; the
+  gap between the arrow's drawn length and the true distance between the two
+  squares is the room chessground leaves for the arrowhead.
+- chessground removes any shape group whose `cgHash` it does not recognise, so
+  the added arrows go whenever it redraws the board. They are put back by the
+  same pass that recolours everything else, which the `MutationObserver` runs
+  on that very redraw.
+- The colour is the best move's own, taken down in lightness: an `hsl()` from
+  the gradient loses lightness directly, a hex colour from the rank palette
+  has its channels dimmed. Both stay recognisably the same green.
+- The added arrows are striped with a `stroke-dasharray` sized so that a whole
+  number of stripes spans the shaft: about one stripe per arrow width, then
+  stretched to fit exactly. A fixed dash would instead cut a stripe off
+  partway wherever the arrowhead happened to fall, which reads as an arrow
+  that failed to draw. The outline is cloned from the arrow and picks the
+  stripes up with it, which leaves the gaps clear instead of showing a solid
+  black bar through them.
+- Each arrow is cut in two where the arrowhead's back edge falls, which
+  chessground puts `refX` stroke widths back from the line's end. The shaft
+  takes the stripes and the shear; the piece the head covers carries the
+  marker. Both are cut square at the ends, since a round cap on the head's
+  piece bulges out past the arrowhead's outline as a pair of dark ears.
+- Dashes always cut square across a line, so the diagonal comes from shearing
+  the shaft along its own direction, sliding each point sideways in proportion
+  to how far off the arrow's axis it lies. Points on the axis stay put, and so
+  does the distance off it, so the arrow keeps its place, its length and its
+  width, and only the stripe ends lean over. It is written as a `matrix` and
+  not as `rotate`/`skewX`/`rotate`: SVG's `skewX` shears about the origin, and
+  composing it with rotations about the arrow's start still shears about a
+  point the arrow's own distance away, which slides the whole shaft along
+  itself by as much as two thirds of a square.
 - Widths come from a per-line modifier in the same `cgHash`. The extension
   reads and stores lichess's original width, then draws every arrow at the
   chosen width. Widths are in chessground's unit, a 64th of a square.
