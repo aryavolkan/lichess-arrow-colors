@@ -668,4 +668,47 @@ test('stripePattern puts several stripes on a one-square shaft', () => {
   assert.ok(n >= 3, `only ${n} stripes on a one-square arrow`);
 });
 
+const { headStripes } = require('../src/logic.js');
 
+test('headStripes stripe the arrowhead on the same lean as the shaft', () => {
+  const k = Math.tan((STRIPE_ANGLE * Math.PI) / 180);
+  const bands = headStripes(STRIPE_ANGLE);
+  assert.ok(bands.length >= 2, 'more than one stripe across the head');
+  for (const b of bands) {
+    assert.equal(b.length, 4, 'a parallelogram');
+    // Each cut leans: the far corner sits further along the arrow than the
+    // near one, in proportion to how far across the head it is.
+    assert.ok(Math.abs(b[3].x - b[0].x - (b[3].y - b[0].y) * k) < 1e-9);
+    assert.ok(b[1].x > b[0].x, 'and has width along the arrow');
+  }
+});
+
+test('headStripes keep the shaft\'s phase, a gap at the head\'s back edge', () => {
+  // Unleaned, a stripe starts half a unit in, so the shaft's last stripe is
+  // followed by a gap before the head's first.
+  assert.ok(headStripes(0).some(b => Math.abs(b[0].x - 0.5) < 1e-9));
+});
+
+test('headStripes run past the head on both sides, for it to be clipped to', () => {
+  for (const b of headStripes(STRIPE_ANGLE)) {
+    assert.ok(b[0].y < 0 && b[3].y > 4, 'clears the head, which spans 0 to 4');
+  }
+});
+
+test('headStripes cover the head at every height, not only across its middle', () => {
+  // A leaning band travels sideways as it crosses the head, so bands that
+  // start outside it still cross it. Leaving those out left the back corner
+  // and the point bare, and the head read as a chevron rather than an arrow.
+  const k = Math.tan((STRIPE_ANGLE * Math.PI) / 180);
+  const bands = headStripes(STRIPE_ANGLE);
+  for (let y = 0; y <= 4; y += 0.25) {
+    const spans = bands
+      .map(b => { const x = b[0].x + (y - b[0].y) * k; return [x, x + (b[1].x - b[0].x)]; })
+      .sort((a, b) => a[0] - b[0]);
+    assert.ok(spans[0][0] <= 0, `reaches the back edge at y=${y}`);
+    assert.ok(spans[spans.length - 1][1] >= CG_HEAD.tipX, `reaches the point at y=${y}`);
+    for (let i = 1; i < spans.length; i++) {
+      assert.ok(spans[i][0] - spans[i - 1][1] < 0.51, `no hole beyond a gap at y=${y}`);
+    }
+  }
+});

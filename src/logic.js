@@ -402,9 +402,9 @@
   // not so dark that it stops reading as the same green.
   const DARKEN = 0.6;
 
-  // How far the shaft's stripes lean off square, in degrees. A shear this
-  // size cuts plainly on the diagonal while still crossing the shaft rather
-  // than running away down it.
+  // How far the stripes lean off square, in degrees. A shear this size cuts
+  // plainly on the diagonal while still crossing the shaft rather than
+  // running away down it.
   const STRIPE_ANGLE = 25;
 
 
@@ -451,6 +451,44 @@
     // Unrounded: rounding the matrix would nudge the arrow off its own
     // squares by a fraction of the rounding, for nothing saved.
     return `matrix(${[a, b, cc, d, e, f].join(' ')})`;
+  }
+
+  // The arrowhead is striped on the same rhythm the shaft works out at, which
+  // is 1.5 stroke widths to a stripe and its gap. Marker geometry is already
+  // in stroke widths, so these are constants rather than a calculation.
+  const HEAD_STRIPE_ON = 1;
+  const HEAD_STRIPE_GAP = 0.5;
+
+  // The head itself spans 0 to 4 across. The bands run past it on both sides,
+  // to be clipped to its outline when drawn.
+  const HEAD_BACK = -0.5;
+  const HEAD_FRONT = 4.5;
+
+  /**
+   * The stripes across an arrowhead, as parallelograms in marker units. They
+   * lean the way the shaft's stripes do and carry on its rhythm, so the head
+   * reads as cut from the same striped material as the arrow it ends.
+   *
+   * A band that leans travels sideways as it crosses the head, by as much as
+   * `lean` over the head's height, so the range has to start that far back and
+   * end that far on: a band beginning outside the head still crosses it, and
+   * leaving those out is what used to leave the head's back corner and its tip
+   * unpainted and the whole head reading as a chevron. The phase is kept, in
+   * whole periods from the head's back edge, so the first gap still falls
+   * where the shaft's last stripe ends.
+   */
+  function headStripes(angle) {
+    const k = Math.tan((angle * Math.PI) / 180);
+    const at = (p, y) => ({ x: p + (y - CG_HEAD.refY) * k, y });
+    const lean = Math.abs(k) * Math.max(CG_HEAD.refY - HEAD_BACK, HEAD_FRONT - CG_HEAD.refY);
+    const period = HEAD_STRIPE_ON + HEAD_STRIPE_GAP;
+    const bands = [];
+    for (let x = HEAD_STRIPE_GAP - Math.ceil((lean + HEAD_STRIPE_ON) / period) * period;
+         x < CG_HEAD.tipX + lean; x += period) {
+      bands.push([at(x, HEAD_BACK), at(x + HEAD_STRIPE_ON, HEAD_BACK),
+                  at(x + HEAD_STRIPE_ON, HEAD_FRONT), at(x, HEAD_FRONT)]);
+    }
+    return bands;
   }
 
   /**
@@ -530,7 +568,7 @@
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
     parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
     continuationMoves, lineForArrow, squarePoint, calibrate, arrowEndpoints, labelPoint,
-    stripePattern, stripeTransform, splitAtHead, darker, STRIPE_ANGLE,
+    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, LABEL_RADIUS, LABEL_STEP, LABEL_FONT, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

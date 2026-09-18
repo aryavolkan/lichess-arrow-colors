@@ -111,11 +111,10 @@ These arrows are finely striped, since they are the one thing on the board
 lichess did not put there: a solid arrow is always a move an engine line
 starts with, and a striped one is always a move further down the best line.
 The stripes are cut on the diagonal, which reads as deliberate at a glance
-where a square cut looks like an arrow that failed to draw. Only the shaft is
-striped. The head is three stroke widths long, and a single gap leaning across
-it takes a bite out of it corner to corner, which leaves a chevron rather than
-an arrowhead; the shaft's stripes run the whole length of the arrow and say
-plainly enough whose arrow it is.
+where a square cut looks like an arrow that failed to draw. The arrowhead is
+striped on the same rhythm and the same lean, so the whole arrow reads as cut
+from one striped material, and it stays square to the arrow so the direction
+still reads.
 
 A move whose arrow is already on the board is not drawn twice. So a line that
 shuffles a piece back and forth keeps only its first, brightest arrow, and a
@@ -180,15 +179,23 @@ Colours and opacity can be changed from the extension's options page
   the added arrows go whenever it redraws the board. They are put back by the
   same pass that recolours everything else, which the `MutationObserver` runs
   on that very redraw.
-- The arrowhead is a `marker`, whose geometry is in units of the line's stroke
-  width: a triangle three long and four across. Striping it was tried and does
-  not survive that size. The stripes have to lean the way the shaft's do, and a
-  gap leaning 25 degrees travels almost two units across a head four units
-  tall, so whichever way the bands are placed one of them slices the head from
-  the back corner to the tip and it stops reading as an arrowhead. The head is
-  drawn solid instead, which is also why its outline marker is filled: with no
-  gaps to show through, the black head underneath is exactly the outline that
-  is wanted.
+- The arrowhead is a `marker`, so its stripes are drawn in marker units, where
+  one unit is the line's stroke width. That is the same measure the shaft's
+  stripes are sized in, so a fixed 1.5 units to a stripe and its gap keeps the
+  two in step at any width. The stripes run past the head on both sides and are
+  clipped to its outline.
+- A leaning band travels sideways as it crosses the head -- 25 degrees over a
+  head four units tall carries it almost two units along -- so the bands have
+  to be generated well outside the head on both sides: one that starts past its
+  point still crosses it lower down. Generating only the bands that start
+  within the head left its back corner and its point bare, and the head read as
+  a chevron rather than an arrow. The phase is kept in whole periods from the
+  back edge, so the first gap still falls where the shaft's last stripe ends.
+- A striped head means its outline marker is drawn unfilled: the outline is
+  wanted, but a filled black head underneath would show through the stripes'
+  gaps instead of the board. That marker is otherwise identical to the filled
+  one lichess's own arrows use, now that both are drawn at the same width, so
+  the marker's id carries which of the two it is.
 - The numerals are drawn as their own groups rather than inside the arrows',
   because opacity on a group applies to everything in it and both the added
   arrows and lichess's own are deliberately faded. In the longest-first ordering they count as
@@ -207,7 +214,7 @@ Colours and opacity can be changed from the extension's options page
 - Each arrow is cut in two where the arrowhead's back edge falls, which
   chessground puts `refX` stroke widths back from the line's end. The shaft
   takes the stripes and the shear; the piece the head covers carries the
-  marker, and stays solid. Both are cut square at the ends, since a round cap on the head's
+  marker. Both are cut square at the ends, since a round cap on the head's
   piece bulges out past the arrowhead's outline as a pair of dark ears.
 - Dashes always cut square across a line, so the diagonal comes from shearing
   the shaft along its own direction, sliding each point sideways in proportion
@@ -221,6 +228,12 @@ Colours and opacity can be changed from the extension's options page
 - Widths come from a per-line modifier in the same `cgHash`. The extension
   reads and stores lichess's original width, then draws every arrow at the
   chosen width. Widths are in chessground's unit, a 64th of a square.
+- An arrow drawn in several pieces paints each piece whole -- its outline, then
+  its body -- before starting the next, rather than laying every outline down
+  first. It matters where the shaft meets the head: the shear slides the last
+  stripe along the arrow by half a width, so it overshoots the head's back edge
+  on one side, and with the outlines all underneath, that overshooting stripe
+  painted over the head's own outline and bit a notch out of its back corner.
 - The outline is a wider copy of the arrow drawn underneath it, which gives the
   shaft an even edge. The arrowhead needs more care: chessground scales the head
   with the line's stroke width, so a wider copy would inflate the head rather

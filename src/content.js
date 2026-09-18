@@ -5,7 +5,7 @@
   const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf, drawOrder,
     parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth,
     continuationMoves, lineForArrow, calibrate, arrowEndpoints, labelPoint, LABEL_RADIUS, LABEL_STEP, LABEL_FONT,
-    stripePattern, stripeTransform, splitAtHead, darker, STRIPE_ANGLE, BEST_BRUSH, DEFAULTS } = globalThis.LAC;
+    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, CG_HEAD, BEST_BRUSH, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -83,12 +83,14 @@
       color.replace(/[^a-z0-9]/gi, ''),
       geom.refX.toFixed(4),
       (geom.strokeWidth || 0).toFixed(4),
+      geom.key || '',
     ].join('-');
     let defs = svg.querySelector('defs');
     if (!defs) {
       defs = document.createElementNS(SVG_NS, 'defs');
       svg.insertBefore(defs, svg.firstChild);
     }
+    if (geom.clip) ensureHeadClip(defs, geom.clip);
     if (!defs.querySelector(`marker[id="${id}"]`)) {
       const marker = document.createElementNS(SVG_NS, 'marker');
       for (const [k, v] of Object.entries({
@@ -99,7 +101,8 @@
       }
       const path = document.createElementNS(SVG_NS, 'path');
       path.setAttribute('d', geom.path);
-      path.setAttribute('fill', color);
+      path.setAttribute('fill', geom.fill === 'none' ? 'none' : color);
+      if (geom.clip) path.setAttribute('clip-path', `url(#${geom.clip})`);
       if (geom.strokeWidth) {
         path.setAttribute('stroke', color);
         path.setAttribute('stroke-width', String(geom.strokeWidth));
@@ -110,6 +113,39 @@
     }
     return id;
   }
+
+  /**
+   * The arrowhead's own outline, as a clip for the stripes drawn across it.
+   * One per board: the stripes are in marker units, so the same clip serves
+   * every striped head whatever width it is drawn at.
+   */
+  function ensureHeadClip(defs, id) {
+    if (defs.querySelector(`clipPath[id="${id}"]`)) return;
+    const clip = document.createElementNS(SVG_NS, 'clipPath');
+    clip.setAttribute('id', id);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M0,0 V4 L3,2 Z');
+    clip.appendChild(path);
+    defs.appendChild(clip);
+  }
+
+  const bandPath = bands =>
+    bands.map(b => `M${b.map(p => `${p.x},${p.y}`).join(' L')} Z`).join(' ');
+
+  /**
+   * A striped arrowhead: the same stripes the shaft carries, on the same
+   * rhythm and the same lean, drawn across the head and clipped to its
+   * outline. The outline comes from the border marker, which is why that one
+   * is drawn unfilled for these arrows -- a filled black head underneath
+   * would show through the gaps instead of the board.
+   */
+  const stripedHead = boardIdx => ({
+    key: 'st',
+    path: bandPath(headStripes(STRIPE_ANGLE)),
+    refX: CG_HEAD.refX,
+    refY: CG_HEAD.refY,
+    clip: `lac-head-${boardIdx}`,
+  });
 
   const ORIG_ATTRS = ['stroke', 'marker-end', 'opacity', 'stroke-width'];
 
@@ -144,10 +180,19 @@
    * Draw the outline as a wider copy of the arrow sitting beneath it. That
    * handles the shaft; the head needs its own marker, built by borderMarker,
    * because a wider stroke would inflate the head rather than outline it.
+   *
+   * The outline goes immediately beneath the line it outlines, not at the
+   * front of the group, so an arrow drawn in several pieces paints each piece
+   * whole before starting the next. It matters at the join: the shear slides
+   * the shaft's last stripe along the arrow by half a width, so the stripe
+   * overshoots the arrowhead's back edge on one side, and with every outline
+   * underneath everything the overshooting stripe painted over the head's own
+   * outline and bit a notch out of its back corner. Painted in pieces, the
+   * head lands whole on top of whatever the shaft does there.
    */
-  function addBorder(svg, boardIdx, group, line, head = true, borderWidth = settings.borderWidth) {
+  function addBorder(svg, boardIdx, group, line, head = true, outlineOnly = false) {
     const arrowWidth = parseStrokeWidth(line.getAttribute('stroke-width'));
-    const width = borderStrokeWidth(arrowWidth, borderWidth);
+    const width = borderStrokeWidth(arrowWidth, settings.borderWidth);
     if (!width) return;
     const border = line.cloneNode(false);
     border.removeAttribute('data-lac-orig');
@@ -156,12 +201,13 @@
     border.setAttribute('stroke-width', String(width));
     border.setAttribute('opacity', '1');
     if (head) {
-      const geom = borderMarker(arrowWidth, borderWidth);
+      const geom = borderMarker(arrowWidth, settings.borderWidth);
+      if (outlineOnly) Object.assign(geom, { fill: 'none', key: 'o' });
       border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, settings.borderColor, geom)})`);
     } else {
       border.removeAttribute('marker-end');
     }
-    group.insertBefore(border, group.firstChild);
+    group.insertBefore(border, line);
   }
 
   const ownLines = group => Array.from(group.querySelectorAll('line:not([data-lac-border])'));
@@ -377,12 +423,7 @@
     // it. The stripes and the darker shade are what mark these as ours, so
     // there is nothing for a thinner line to say that they do not.
     const width = drawnWidth(ref.line) || parseStrokeWidth(ref.line.getAttribute('stroke-width')) || DEFAULTS.width;
-    // The same filled head lichess's own arrows get. The shaft's stripes run
-    // the whole length of the arrow and say plainly enough that the extension
-    // drew it; a head only three stroke widths long cannot carry a stripe and
-    // still read as an arrowhead, since a single gap, leaning, takes a bite
-    // out of it corner to corner.
-    const marker = ensureMarker(svg, boardIdx, color);
+    const marker = ensureMarker(svg, boardIdx, color, stripedHead(boardIdx));
     const made = mine.map(m => {
       const g = document.createElementNS(SVG_NS, 'g');
       g.setAttribute(EXTRA, '');
@@ -393,9 +434,10 @@
       // Striped, so an arrow the extension drew is never mistaken for one
       // lichess drew. The arrow is split where the arrowhead's back edge
       // falls: the shaft takes the stripes and the shear, the other piece
-      // takes the head, which is left solid. Both are cut square at the ends,
-      // so the shear leaves a clean diagonal and no cap rounds out past the
-      // head. The outlines are cloned off the two, stripes, shear and all.
+      // takes the head, whose stripes carry on the shaft's rhythm. Both are
+      // cut square at the ends, so the shear leaves a clean diagonal and no
+      // cap rounds out past the head. The outlines are cloned off the two,
+      // stripes, shear and all.
       const cut = splitAtHead(m.at.x1, m.at.y1, m.at.x2, m.at.y2, width);
       const lines = [];
       if (cut && cut.shaft) {
@@ -415,7 +457,7 @@
 
       lines.forEach(([line]) => g.appendChild(line));
       parent.appendChild(g);
-      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead));
+      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead, true));
       return g;
     });
 

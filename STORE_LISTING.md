@@ -46,8 +46,8 @@ Other things it does:
 - Draws the rest of the engine's best line, which lichess leaves off the board
   entirely: lichess draws only the first move of each line. The extra moves are
   drawn at the same width and outlined the same way as lichess's own, in a
-  darker shade of the same green and with the shaft finely striped on the
-  diagonal, so you can always tell them apart from the arrows lichess itself
+  darker shade of the same green and finely striped on the diagonal, head and
+  all, so you can always tell them apart from the arrows lichess itself
   draws. Every move of the line is numbered with its place in it, the move
   lichess draws being 1, and a move that is already on the board is numbered
   where it stands rather than drawn over. They are drawn at four fifths of a
