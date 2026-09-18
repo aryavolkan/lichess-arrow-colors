@@ -3,7 +3,7 @@
 (() => {
   'use strict';
   const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf,
-    parseStrokeWidth, borderStrokeWidth, borderMarkerRefX, DEFAULTS } = globalThis.LAC;
+    parseStrokeWidth, borderStrokeWidth, borderMarker, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -47,31 +47,46 @@
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
-  /** One arrowhead marker per colour, created on demand. Returns its id. */
-  function ensureMarker(svg, boardIdx, color, prefix, refX) {
-    const anchor = refX === undefined ? 2.05 : refX;
-    const id = `lac-${prefix || 'a'}${boardIdx}-${color.replace(/[^a-z0-9]/gi, '')}-${anchor.toFixed(4)}`;
+  /**
+   * Create an arrowhead marker on demand and return its id. With no `spec`
+   * this is chessground's own head filled in `color`; with one it is the
+   * outline's head, which draws the same triangle stroked outwards.
+   */
+  function ensureMarker(svg, boardIdx, color, spec) {
+    const geom = spec || { path: 'M0,0 V4 L3,2 Z', refX: 2.05, refY: 2 };
+    const id = [
+      'lac',
+      boardIdx,
+      color.replace(/[^a-z0-9]/gi, ''),
+      geom.refX.toFixed(4),
+      (geom.strokeWidth || 0).toFixed(4),
+    ].join('-');
     let defs = svg.querySelector('defs');
     if (!defs) {
       defs = document.createElementNS(SVG_NS, 'defs');
       svg.insertBefore(defs, svg.firstChild);
     }
     if (!defs.querySelector(`marker[id="${id}"]`)) {
-      // Same geometry chessground uses, so heads line up with the shaft.
       const marker = document.createElementNS(SVG_NS, 'marker');
-      for (const [k, v] of Object.entries({ id, cgKey: id, orient: 'auto', overflow: 'visible', markerWidth: 4, markerHeight: 4, refX: anchor, refY: 2 })) {
+      for (const [k, v] of Object.entries({
+        id, cgKey: id, orient: 'auto', overflow: 'visible',
+        markerWidth: 4, markerHeight: 4, refX: geom.refX, refY: geom.refY,
+      })) {
         marker.setAttribute(k, v);
       }
       const path = document.createElementNS(SVG_NS, 'path');
-      path.setAttribute('d', 'M0,0 V4 L3,2 Z');
+      path.setAttribute('d', geom.path);
       path.setAttribute('fill', color);
+      if (geom.strokeWidth) {
+        path.setAttribute('stroke', color);
+        path.setAttribute('stroke-width', String(geom.strokeWidth));
+        path.setAttribute('stroke-linejoin', geom.strokeLinejoin || 'round');
+      }
       marker.appendChild(path);
       defs.appendChild(marker);
     }
     return id;
   }
-
-  // ---- recolouring -----------------------------------------------------
 
   const ORIG_ATTRS = ['stroke', 'marker-end', 'opacity'];
 
@@ -111,8 +126,8 @@
     border.setAttribute('stroke', settings.borderColor);
     border.setAttribute('stroke-width', String(width));
     border.setAttribute('opacity', '1');
-    const refX = borderMarkerRefX(arrowWidth, settings.borderWidth);
-    border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, settings.borderColor, 'b', refX)})`);
+    const head = borderMarker(arrowWidth, settings.borderWidth);
+    border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, settings.borderColor, head)})`);
     group.insertBefore(border, group.firstChild);
   }
 

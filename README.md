@@ -44,8 +44,9 @@ is fixed.
 ## Outlines
 
 Arrows are outlined in black by default, which keeps them legible over pieces
-and over both light and dark squares. The outline follows the arrowhead as well
-as the shaft, and its colour and thickness are adjustable. Turn it off on the
+and over both light and dark squares. The outline is the same thickness the
+whole way round, including the arrowhead, and adding it does not change the
+size of the arrow itself. Its colour and thickness are adjustable. Turn it off on the
 options page if you prefer lichess's plain arrows.
 
 ## Install
@@ -75,10 +76,14 @@ Colours and opacity can be changed from the extension's options page
 - When a row's evaluation is not shown (lichess hides it with a single engine
   line), the arrow's line width is used instead, since lichess derives that
   width from the same quantity.
-- The outline is a wider copy of the arrow drawn underneath it. Arrowhead
-  markers scale with stroke width, so the wider copy gets a bigger head for
-  free; its anchor point is shifted so the outline is as thick past the tip as
-  it is along the sides.
+- The outline is a wider copy of the arrow drawn underneath it, which gives the
+  shaft an even edge. The arrowhead needs more care: chessground scales the head
+  with the line's stroke width, so a wider copy would inflate the head rather
+  than outline it, leaving its sides and back several times thicker than the
+  shaft's edge. The outline instead draws the head at exactly the arrow's size
+  and strokes it, half the stroke falling outside the edge, with round joins so
+  even the sharp tip is offset by the same amount. The arrow's own size never
+  changes.
 - Arrows are faded through their group rather than per line. Fading each line
   on its own would let the outline show through the arrow body and muddy the
   colour.

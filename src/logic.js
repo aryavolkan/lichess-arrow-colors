@@ -149,21 +149,36 @@
     return arrowWidth + 2 * borderWidth;
   }
 
-  // chessground's arrowhead: tip at marker x=3, anchored at refX, scaled by
-  // stroke width. So the tip juts (3 - refX) * width beyond the line end.
-  const CG_TIP_X = 3;
-  const CG_REF_X = 2.05;
+  // chessground's arrowhead, in marker units: the triangle (0,0) (0,4) (3,2),
+  // anchored at (refX, refY) and multiplied by the line's stroke width.
+  const CG_HEAD = Object.freeze({ tipX: 3, refX: 2.05, refY: 2 });
 
   /**
-   * refX for the outline's arrowhead, chosen so the outline is as thick past
-   * the arrow's tip as it is along its sides. Without this the outline's head,
-   * being wider, would jut disproportionately far ahead.
+   * Geometry for the outline's arrowhead.
+   *
+   * The outline has to sit a constant border width outside the arrow. Simply
+   * letting the wider outline stroke scale the head up does not do that: it
+   * inflates the triangle about its anchor, so the head's sides and back come
+   * out several times thicker than the shaft's edge. Instead the outline draws
+   * the *same* triangle and strokes it, half the stroke falling outside the
+   * edge, with round joins so even the sharp tip is offset by exactly one
+   * border width.
+   *
+   * Marker geometry is multiplied by the line's stroke width, and the outline
+   * line is wider than the arrow, so the triangle is pre-divided by that ratio.
    */
-  function borderMarkerRefX(arrowWidth, borderWidth) {
+  function borderMarker(arrowWidth, borderWidth) {
     const wide = borderStrokeWidth(arrowWidth, borderWidth);
     if (!wide) return null;
-    const reach = (CG_TIP_X - CG_REF_X) * arrowWidth + borderWidth;
-    return Math.min(CG_TIP_X, Math.max(0, CG_TIP_X - reach / wide));
+    const scale = arrowWidth / wide;
+    return {
+      scale,
+      path: `M0,0 V${4 * scale} L${3 * scale},${2 * scale} Z`,
+      refX: CG_HEAD.refX * scale,
+      refY: CG_HEAD.refY * scale,
+      strokeWidth: (2 * borderWidth) / wide,
+      strokeLinejoin: 'round',
+    };
   }
 
   /**
@@ -205,7 +220,7 @@
   const api = {
     parseCgHash, pvKeys, rankArrows, colorForRank,
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
-    parseStrokeWidth, borderStrokeWidth, borderMarkerRefX,
+    parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

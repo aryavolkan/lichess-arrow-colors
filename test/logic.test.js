@@ -227,22 +227,60 @@ test('DEFAULTS carry a sane border', () => {
   assert.ok(DEFAULTS.borderWidth > 0 && DEFAULTS.borderWidth < 0.2);
 });
 
-const { borderMarkerRefX } = require('../src/logic.js');
+const { borderMarker, CG_HEAD } = require('../src/logic.js');
 
-test('borderMarkerRefX makes the outline as thick at the tip as at the sides', () => {
-  for (const [w, b] of [[0.1875, 0.03], [0.234375, 0.03], [0.046875, 0.02], [0.171875, 0.05]]) {
+// The outline must sit a constant `b` outside the arrow everywhere: along the
+// shaft, round the tail, and all the way round the head. Scaling the head
+// triangle up by the wider stroke does NOT do that -- it inflates the triangle
+// about its anchor, leaving the head's sides and back several times too thick.
+// So the outline's head is the SAME triangle, stroked with width 2b (half of
+// which falls outside the edge) and round joins.
+test('borderMarker draws the same head triangle as the arrow, not a bigger one', () => {
+  const [w, b] = [0.1875, 0.03];
+  const wb = borderStrokeWidth(w, b);
+  const m = borderMarker(w, b);
+  // Marker geometry is multiplied by the line's stroke width when drawn.
+  assert.ok(Math.abs(m.scale * wb - w) < 1e-12, 'rendered head must match the arrow head');
+});
+
+test('borderMarker keeps the head anchored exactly where the arrow head is', () => {
+  for (const [w, b] of [[0.1875, 0.03], [0.234375, 0.03], [0.171875, 0.05]]) {
     const wb = borderStrokeWidth(w, b);
-    const refX = borderMarkerRefX(w, b);
-    // chessground's arrowhead tip sits at marker x=3 with refX 2.05, and
-    // markers scale with stroke width, so the tip juts (3 - refX) * width past
-    // the line end. The outline's tip should jut exactly one border further.
-    assert.ok(Math.abs((3 - refX) * wb - ((3 - 2.05) * w + b)) < 1e-9, `w=${w} b=${b}`);
+    const m = borderMarker(w, b);
+    // Tip and centre line must land in the same place as the arrow's own head;
+    // the outline comes from the stroke, not from shifting the triangle.
+    // The triangle is pre-scaled in marker units, so its tip sits at tipX * scale.
+    const tipOffset = (CG_HEAD.tipX * m.scale - m.refX) * wb;
+    assert.ok(Math.abs(tipOffset - (CG_HEAD.tipX - CG_HEAD.refX) * w) < 1e-12, `tip w=${w}`);
+    assert.ok(Math.abs(m.refY * wb - CG_HEAD.refY * w) < 1e-12, `centre w=${w}`);
   }
 });
 
-test('borderMarkerRefX stays within the marker box', () => {
-  assert.ok(borderMarkerRefX(0.01, 0.5) >= 0);
-  assert.ok(borderMarkerRefX(1, 0.001) <= 3);
-  assert.equal(borderMarkerRefX(null, 0.03), null);
-  assert.equal(borderMarkerRefX(0.1875, 0), null);
+test('borderMarker strokes exactly one border width outside the head edge', () => {
+  for (const [w, b] of [[0.1875, 0.03], [0.046875, 0.02]]) {
+    const wb = borderStrokeWidth(w, b);
+    const m = borderMarker(w, b);
+    // Half of a centred stroke falls outside the edge.
+    assert.ok(Math.abs((m.strokeWidth * wb) / 2 - b) < 1e-12, `outset w=${w}`);
+    assert.equal(m.strokeLinejoin, 'round');
+  }
+});
+
+test('borderMarker path is the head triangle at the marker scale', () => {
+  const m = borderMarker(0.1875, 0.03);
+  const k = m.scale;
+  assert.equal(m.path, `M0,0 V${4 * k} L${3 * k},${2 * k} Z`);
+});
+
+test('the outline never makes the arrow head bigger', () => {
+  for (const [w, b] of [[0.1875, 0.03], [0.234375, 0.06], [0.046875, 0.02]]) {
+    const m = borderMarker(w, b);
+    const drawn = m.scale * borderStrokeWidth(w, b);
+    assert.ok(Math.abs(drawn - w) < 1e-12, `head grew: ${drawn} vs ${w}`);
+  }
+});
+
+test('borderMarker returns null when there is nothing to outline', () => {
+  assert.equal(borderMarker(null, 0.03), null);
+  assert.equal(borderMarker(0.1875, 0), null);
 });
