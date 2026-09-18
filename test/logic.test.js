@@ -342,6 +342,17 @@ test('drawOrder keeps equally long arrows in the order lichess gave them', () =>
   assert.deepEqual(drawOrder(arrows), [0, 1, 2]);
 });
 
+test('drawOrder keeps the numerals on top of everything, circles included', () => {
+  // The numeral comes first here, so passing only means it was moved last on
+  // purpose and not by the tie that keeps equal shapes in the order given.
+  const shapes = [
+    { label: true },              // a numeral
+    { orig: 'e4', dest: null },   // a circle
+    { orig: 'e2', dest: 'e4' },
+  ];
+  assert.deepEqual(drawOrder(shapes), [2, 1, 0]);
+});
+
 test('drawOrder puts circles and unreadable shapes on top of every arrow', () => {
   const arrows = [
     { orig: 'e4', dest: null },
@@ -352,7 +363,8 @@ test('drawOrder puts circles and unreadable shapes on top of every arrow', () =>
 });
 
 // ---- the rest of the best line -----------------------------------------
-const { continuationMoves, squarePoint, calibrate, arrowEndpoints, depthOpacity, LINE_FADE_FLOOR } = require('../src/logic.js');
+const { continuationMoves, squarePoint, calibrate, arrowEndpoints, lineOpacity, labelPoint,
+  LABEL_RADIUS, LABEL_FONT } = require('../src/logic.js');
 
 test('continuationMoves returns the line after the move lichess already draws', () => {
   const line = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5'];
@@ -439,17 +451,51 @@ test('arrowEndpoints survives an arrow shorter than the margin', () => {
   assert.equal(arrowEndpoints('e2', 'e4', null), null);
 });
 
-test('depthOpacity fades down the line to the same floor at any depth', () => {
-  assert.equal(depthOpacity(0, 3, 0.6), 0.6);
-  assert.ok(depthOpacity(1, 3, 0.6) > depthOpacity(2, 3, 0.6));
-  assert.ok(depthOpacity(2, 3, 0.6) > depthOpacity(3, 3, 0.6));
-  assert.ok(Math.abs(depthOpacity(3, 3, 0.6) - 0.6 * LINE_FADE_FLOOR) < 1e-9);
-  assert.ok(Math.abs(depthOpacity(8, 8, 0.6) - 0.6 * LINE_FADE_FLOOR) < 1e-9);
+test('lineOpacity draws an added arrow at half a regular one', () => {
+  assert.equal(lineOpacity(0.65), 0.325);
+  assert.equal(lineOpacity(1), 0.5);
+  assert.equal(lineOpacity(DEFAULTS.opacity), DEFAULTS.opacity / 2);
 });
 
-test('depthOpacity keeps the deepest arrow visible', () => {
-  assert.ok(depthOpacity(8, 8, DEFAULTS.opacity) > 0.15);
-  assert.ok(LINE_FADE_FLOOR > 0 && LINE_FADE_FLOOR < 1);
+test('labelPoint sits beside the shaft, just behind the arrowhead', () => {
+  const p = labelPoint({ x1: 0, y1: 0, x2: 2, y2: 0 }, 0.1, 0.2);
+  assert.ok(Math.abs(p.x - 1.9) < 1e-9, 'behind the head, along the arrow');
+  assert.ok(Math.abs(Math.abs(p.y) - 0.2) < 1e-9, 'and off to the side of it');
+});
+
+test('labelPoint keeps to the same side of the arrow whichever way it points', () => {
+  // Which side of the arrow the label fell on, from the sign of the cross
+  // product of the arrow with the offset.
+  const side = (x1, y1, x2, y2) => {
+    const p = labelPoint({ x1, y1, x2, y2 }, 0.1, 0.2);
+    return Math.sign((x2 - x1) * (p.y - y2) - (y2 - y1) * (p.x - x2));
+  };
+  const want = side(0, 0, 2, 0);
+  assert.notEqual(want, 0);
+  for (const a of [[0, 0, 0, 2], [3, 3, -1, -2], [1.5, 1.5, 3.36, 0.57]]) {
+    assert.equal(side(...a), want);
+  }
+});
+
+test('labelPoint never slides past the middle of a short shaft', () => {
+  const p = labelPoint({ x1: 0, y1: 0, x2: 0.2, y2: 0 }, 0.5, 0);
+  assert.ok(Math.abs(p.x - 0.1) < 1e-9, 'stays within the shaft');
+});
+
+test('labelPoint follows a diagonal shaft', () => {
+  const p = labelPoint({ x1: 0, y1: 0, x2: 3, y2: 4 }, 0.5, 0);
+  assert.ok(Math.abs(Math.hypot(3 - p.x, 4 - p.y) - 0.5) < 1e-9);
+  assert.ok(Math.abs(p.y / p.x - 4 / 3) < 1e-9);
+});
+
+test('labelPoint has nowhere to sit on a shaft of no length', () => {
+  assert.equal(labelPoint({ x1: 1, y1: 1, x2: 1, y2: 1 }, 0.2, 0.2), null);
+  assert.equal(labelPoint(null, 0.2, 0.2), null);
+});
+
+test('the numeral is small enough to sit beside a half-width arrow', () => {
+  assert.ok(LABEL_RADIUS < 0.18, 'a disc, not a badge over the board');
+  assert.ok(LABEL_FONT < 2 * LABEL_RADIUS, 'the numeral fits its disc');
 });
 
 
@@ -593,4 +639,44 @@ test('stripePattern puts several stripes on a one-square shaft', () => {
   const [on, off] = stripePattern(DEFAULTS.width, 0.85);
   const n = Math.round((0.85 + off) / (on + off));
   assert.ok(n >= 3, `only ${n} stripes on a one-square arrow`);
+});
+
+const { lineWidth, LINE_WIDTH } = require('../src/logic.js');
+
+test('lineWidth draws an added arrow at half a regular one', () => {
+  assert.equal(lineWidth(0.15), 0.075);
+  assert.equal(lineWidth(DEFAULTS.width), DEFAULTS.width / 2);
+  assert.equal(LINE_WIDTH, 0.5);
+});
+
+test('lineWidth has no width to halve without one', () => {
+  assert.equal(lineWidth(0), null);
+  assert.equal(lineWidth(null), null);
+});
+
+const { headStripes } = require('../src/logic.js');
+
+test('headStripes stripe the arrowhead on the same lean as the shaft', () => {
+  const k = Math.tan((STRIPE_ANGLE * Math.PI) / 180);
+  const bands = headStripes(STRIPE_ANGLE);
+  assert.ok(bands.length >= 2, 'more than one stripe across the head');
+  for (const b of bands) {
+    assert.equal(b.length, 4, 'a parallelogram');
+    // Each cut leans: the far corner sits further along the arrow than the
+    // near one, in proportion to how far across the head it is.
+    assert.ok(Math.abs(b[3].x - b[0].x - (b[3].y - b[0].y) * k) < 1e-9);
+    assert.ok(b[1].x > b[0].x, 'and has width along the arrow');
+  }
+});
+
+test('headStripes start clear of the head\'s back edge and reach its point', () => {
+  const bands = headStripes(0);
+  assert.ok(bands[0][0].x > 0, 'a gap first, carrying on from the shaft');
+  assert.equal(bands[bands.length - 1][1].x, CG_HEAD.tipX);
+});
+
+test('headStripes run past the head on both sides, for it to be clipped to', () => {
+  for (const b of headStripes(STRIPE_ANGLE)) {
+    assert.ok(b[0].y < 0 && b[3].y > 4, 'clears the head, which spans 0 to 4');
+  }
 });

@@ -46,8 +46,11 @@ Other things it does:
 - Draws the rest of the engine's best line, which lichess leaves off the board
   entirely: lichess draws only the first move of each line. The extra moves are
   drawn in a darker shade of the same green and finely striped on the diagonal,
-  so you can always tell them from the arrows lichess itself draws. Five moves
-  deep by default, adjustable up to eight, or off.
+  so you can always tell them from the arrows lichess itself draws, and each is
+  numbered with its place in the line. They are drawn at half the width and
+  half the opacity of a regular arrow, so the move you actually have to play
+  stays the strongest thing on the board. Five moves deep by default, adjustable up to eight, or
+  off.
 - Draws every arrow at the same width. Lichess thins the weaker ones, but the
   colour already says that, so the widths only added noise.
 - Outlines the arrows so they stay readable over pieces and over light and dark

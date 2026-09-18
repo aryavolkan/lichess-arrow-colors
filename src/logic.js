@@ -22,11 +22,17 @@
   // spread over differences that do not matter.
   const MIN_SPAN = 0.05;
 
-  // The deepest continuation arrow is drawn at this fraction of the opacity
-  // the first move gets, whatever depth the line is drawn to. Kept shallow:
-  // the stripes and the darker green already say which arrows these are, and
-  // fading hard on top of that washes the colour out to grey.
-  const LINE_FADE_FLOOR = 0.75;
+  // An added arrow is drawn at this fraction of a regular arrow's opacity,
+  // and this fraction of its width. The outline goes with the width, or it
+  // would be nearly as thick as the arrow it outlines.
+  const LINE_OPACITY = 0.5;
+  const LINE_WIDTH = 0.5;
+
+  // The numeral each added arrow carries, as a disc beside the shaft behind
+  // the arrowhead. Radius and type size are in board units, where a square
+  // is 1.
+  const LABEL_RADIUS = 0.13;
+  const LABEL_FONT = 0.19;
 
   // Half a square: chessground's board units put the centre of the board at
   // (0, 0), so a1's centre is 3.5 squares out along both axes.
@@ -241,8 +247,13 @@
     });
   }
 
-  /** How far an arrow travels, in squares squared. Circles count as 0. */
+  /**
+   * How far an arrow travels, in squares squared. Circles count as 0, and a
+   * numeral less than that: it is drawn after every arrow, whatever is
+   * underneath it, so a number is never buried by an arrow crossing it.
+   */
   function arrowLength(a) {
+    if (a && a.label) return -1;
     if (!a || !a.dest || !SQUARE.test(a.orig) || !SQUARE.test(a.dest)) return 0;
     const dx = a.dest.charCodeAt(0) - a.orig.charCodeAt(0);
     const dy = a.dest.charCodeAt(1) - a.orig.charCodeAt(1);
@@ -416,6 +427,30 @@
     return `matrix(${[a, b, cc, d, e, f].join(' ')})`;
   }
 
+  // The arrowhead is striped on the same rhythm the shaft works out at, which
+  // is 1.5 stroke widths to a stripe and its gap. Marker geometry is already
+  // in stroke widths, so these are constants rather than a calculation.
+  const HEAD_STRIPE_ON = 1;
+  const HEAD_STRIPE_GAP = 0.5;
+
+  /**
+   * The stripes across an arrowhead, as parallelograms in marker units.
+   * They lean the way the shaft's stripes do and run past the head on both
+   * sides, to be clipped to its outline when drawn. The first gap falls at
+   * the head's back edge, carrying on from the shaft's last stripe.
+   */
+  function headStripes(angle) {
+    const k = Math.tan((angle * Math.PI) / 180);
+    const back = -0.5, front = 4.5;   // the head itself spans 0 to 4 across
+    const at = (p, y) => ({ x: p + (y - CG_HEAD.refY) * k, y });
+    const bands = [];
+    for (let x = HEAD_STRIPE_GAP; x < CG_HEAD.tipX; x += HEAD_STRIPE_ON + HEAD_STRIPE_GAP) {
+      const end = Math.min(x + HEAD_STRIPE_ON, CG_HEAD.tipX);
+      bands.push([at(x, back), at(end, back), at(end, front), at(x, front)]);
+    }
+    return bands;
+  }
+
   /**
    * Split an arrow where the arrowhead's back edge falls: the shaft, which
    * carries the stripes, and the piece the head covers, which carries the
@@ -462,16 +497,35 @@
     return color;
   }
 
+  /** Added arrows sit at half the opacity a regular arrow is drawn at. */
+  function lineOpacity(base) {
+    return base * LINE_OPACITY;
+  }
+
+  /** ...and half its width, outline and arrowhead included. */
+  function lineWidth(base) {
+    return base > 0 ? base * LINE_WIDTH : null;
+  }
+
   /**
-   * Opacity for a move `ply` steps down the line. The move lichess draws
-   * keeps the full setting and the deepest arrow always lands on the same
-   * floor, so the fade reads the same whether the line is one move long or
-   * eight.
+   * Where an added arrow's numeral goes: `back` along the shaft from the
+   * arrowhead and `side` off to one side of it, so it sits next to the arrow
+   * rather than over it. Always the same side of the arrow's own direction,
+   * so a board of them looks ordered rather than scattered, and two moves
+   * arriving at the same square from different directions do not stack their
+   * numbers on top of each other. On a shaft with no room to sit back that
+   * far, it moves in to the middle.
    */
-  function depthOpacity(ply, depth, base) {
-    if (!(ply > 0) || !(depth > 0)) return base;
-    const t = Math.min(1, ply / depth);
-    return base * (1 - (1 - LINE_FADE_FLOOR) * t);
+  function labelPoint(at, back, side) {
+    if (!at) return null;
+    const dx = at.x2 - at.x1, dy = at.y2 - at.y1;
+    const len = Math.hypot(dx, dy);
+    if (!len) return null;
+    const along = Math.min(back, len / 2);
+    return {
+      x: at.x2 - (dx / len) * along - (dy / len) * side,
+      y: at.y2 - (dy / len) * along + (dx / len) * side,
+    };
   }
 
   function colorForRank(rank, palette) {
@@ -483,9 +537,9 @@
     parseCgHash, pvKeys, rankArrows, colorForRank, arrowLength, drawOrder,
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
     parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
-    continuationMoves, squarePoint, calibrate, arrowEndpoints, depthOpacity,
-    stripePattern, stripeTransform, splitAtHead, darker, STRIPE_ANGLE,
-    DEFAULTS, MAX_SHIFT, MIN_SPAN, LINE_FADE_FLOOR, BEST_BRUSH, ALT_BRUSH,
+    continuationMoves, squarePoint, calibrate, arrowEndpoints, lineOpacity, lineWidth, labelPoint,
+    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE,
+    DEFAULTS, MAX_SHIFT, MIN_SPAN, LINE_OPACITY, LINE_WIDTH, LABEL_RADIUS, LABEL_FONT, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LAC = api;

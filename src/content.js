@@ -3,9 +3,9 @@
 (() => {
   'use strict';
   const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf, drawOrder,
-    parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth,
-    continuationMoves, calibrate, arrowEndpoints, depthOpacity,
-    stripePattern, stripeTransform, splitAtHead, darker, STRIPE_ANGLE, BEST_BRUSH, DEFAULTS } = globalThis.LAC;
+    parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth, CG_HEAD,
+    continuationMoves, calibrate, arrowEndpoints, lineOpacity, lineWidth, labelPoint, LABEL_RADIUS, LABEL_FONT,
+    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, BEST_BRUSH, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -76,12 +76,14 @@
       color.replace(/[^a-z0-9]/gi, ''),
       geom.refX.toFixed(4),
       (geom.strokeWidth || 0).toFixed(4),
+      geom.key || '',
     ].join('-');
     let defs = svg.querySelector('defs');
     if (!defs) {
       defs = document.createElementNS(SVG_NS, 'defs');
       svg.insertBefore(defs, svg.firstChild);
     }
+    if (geom.clip) ensureHeadClip(defs, geom.clip);
     if (!defs.querySelector(`marker[id="${id}"]`)) {
       const marker = document.createElementNS(SVG_NS, 'marker');
       for (const [k, v] of Object.entries({
@@ -92,7 +94,8 @@
       }
       const path = document.createElementNS(SVG_NS, 'path');
       path.setAttribute('d', geom.path);
-      path.setAttribute('fill', color);
+      path.setAttribute('fill', geom.fill === 'none' ? 'none' : color);
+      if (geom.clip) path.setAttribute('clip-path', `url(#${geom.clip})`);
       if (geom.strokeWidth) {
         path.setAttribute('stroke', color);
         path.setAttribute('stroke-width', String(geom.strokeWidth));
@@ -103,6 +106,38 @@
     }
     return id;
   }
+
+  /**
+   * The arrowhead's own outline, as a clip for the stripes drawn across it.
+   * One per board: the stripes are in marker units, so the same clip serves
+   * every striped head whatever width it is drawn at.
+   */
+  function ensureHeadClip(defs, id) {
+    if (defs.querySelector(`clipPath[id="${id}"]`)) return;
+    const clip = document.createElementNS(SVG_NS, 'clipPath');
+    clip.setAttribute('id', id);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M0,0 V4 L3,2 Z');
+    clip.appendChild(path);
+    defs.appendChild(clip);
+  }
+
+  const bandPath = bands =>
+    bands.map(b => `M${b.map(p => `${p.x},${p.y}`).join(' L')} Z`).join(' ');
+
+  /**
+   * A striped arrowhead: the same stripes the shaft carries, drawn across
+   * the head and clipped to its outline. Its outline comes from the border
+   * marker, which is why that one is drawn unfilled here — a filled black
+   * head would show through the gaps instead of the board.
+   */
+  const stripedHead = boardIdx => ({
+    key: 'st',
+    path: bandPath(headStripes(STRIPE_ANGLE)),
+    refX: CG_HEAD.refX,
+    refY: CG_HEAD.refY,
+    clip: `lac-head-${boardIdx}`,
+  });
 
   const ORIG_ATTRS = ['stroke', 'marker-end', 'opacity', 'stroke-width'];
 
@@ -138,9 +173,9 @@
    * handles the shaft; the head needs its own marker, built by borderMarker,
    * because a wider stroke would inflate the head rather than outline it.
    */
-  function addBorder(svg, boardIdx, group, line, head = true) {
+  function addBorder(svg, boardIdx, group, line, head = true, borderWidth = settings.borderWidth, outlineOnly = false) {
     const arrowWidth = parseStrokeWidth(line.getAttribute('stroke-width'));
-    const width = borderStrokeWidth(arrowWidth, settings.borderWidth);
+    const width = borderStrokeWidth(arrowWidth, borderWidth);
     if (!width) return;
     const border = line.cloneNode(false);
     border.removeAttribute('data-lac-orig');
@@ -149,7 +184,8 @@
     border.setAttribute('stroke-width', String(width));
     border.setAttribute('opacity', '1');
     if (head) {
-      const geom = borderMarker(arrowWidth, settings.borderWidth);
+      const geom = borderMarker(arrowWidth, borderWidth);
+      if (outlineOnly) Object.assign(geom, { fill: 'none', key: 'o' });
       border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, settings.borderColor, geom)})`);
     } else {
       border.removeAttribute('marker-end');
@@ -194,10 +230,11 @@
   // recognise, so these go when it redraws the board and are put back by the
   // apply() the same mutation triggers.
   const EXTRA = 'data-lac-extra';
+  const LABEL = 'data-lac-label';
   const LINE_STAMP = 'data-lac-line';
 
   function clearExtras(svg) {
-    svg.querySelectorAll(`g[${EXTRA}]`).forEach(el => el.remove());
+    svg.querySelectorAll(`g[${EXTRA}], g[${LABEL}]`).forEach(el => el.remove());
     svg.removeAttribute(LINE_STAMP);
   }
 
@@ -222,6 +259,44 @@
   }
 
   const lengthOf = at => Math.hypot(at.x2 - at.x1, at.y2 - at.y1);
+
+  /**
+   * The move's place in the best line, as a disc on the shaft. Lichess's own
+   * arrow is the line's first move, so the one after it is 2.
+   *
+   * It goes in a group of its own rather than the arrow's, because the added
+   * arrows are drawn at half a regular arrow's opacity and a number at half
+   * opacity cannot be read.
+   */
+  function makeLabel(at, ply, color, clear) {
+    const point = labelPoint(at, LABEL_RADIUS, LABEL_RADIUS + clear);
+    if (!point) return null;
+    const group = document.createElementNS(SVG_NS, 'g');
+    group.setAttribute(LABEL, '');
+    // Solid, where the arrows are half faded. A translucent numeral takes on
+    // whatever it happens to be over — a lichess arrow crossing underneath,
+    // a piece, a dark square — and stops being readable.
+    group.setAttribute('opacity', '1');
+    const disc = document.createElementNS(SVG_NS, 'circle');
+    for (const [k, v] of Object.entries({ cx: point.x, cy: point.y, r: LABEL_RADIUS, fill: color })) {
+      disc.setAttribute(k, String(v));
+    }
+    if (settings.border && settings.borderWidth > 0) {
+      disc.setAttribute('stroke', settings.borderColor);
+      disc.setAttribute('stroke-width', String(lineWidth(settings.borderWidth)));
+    }
+    const text = document.createElementNS(SVG_NS, 'text');
+    for (const [k, v] of Object.entries({
+      x: point.x, y: point.y, fill: '#ffffff', 'font-size': LABEL_FONT, 'font-weight': 'bold',
+      'text-anchor': 'middle', 'dominant-baseline': 'central',
+    })) {
+      text.setAttribute(k, String(v));
+    }
+    text.textContent = String(ply + 1);
+    group.appendChild(disc);
+    group.appendChild(text);
+    return group;
+  }
 
   /**
    * A copy of a real lichess arrow, moved onto `at` and painted. Copied
@@ -266,9 +341,15 @@
       settings.border, settings.borderColor, settings.borderWidth,
       ref.cal.flipped, ref.cal.margin, moves.map(m => m.key).join(' '),
     ].join(':');
+    // The labels ride along in the ordering with a length of nothing, which
+    // leaves them on top of every arrow.
+    const withLabels = (arrows, labels) => ({
+      groups: arrows.concat(labels),
+      parsed: moves.concat(labels.map(() => ({ label: true }))),
+    });
     const existing = Array.from(parent.querySelectorAll(`:scope > g[${EXTRA}]`));
     if (svg.getAttribute(LINE_STAMP) === stamp && existing.length === moves.length) {
-      return { groups: existing, parsed: moves };
+      return withLabels(existing, Array.from(parent.querySelectorAll(`:scope > g[${LABEL}]`)));
     }
 
     clearExtras(svg);
@@ -276,16 +357,18 @@
     // Lichess's own width for the best line, before we touched it.
     const refWidth = parseStrokeWidth(origAttr(ref.line, 'stroke-width') ?? ref.line.getAttribute('stroke-width'));
     const width = arrowStrokeWidth(refWidth, settings.uniformWidth, settings.width);
-    const marker = ensureMarker(svg, boardIdx, color);
-    // Where the head ends and how long a stripe runs are both set by the
-    // width the arrow is actually drawn at.
-    const stripeWidth = width || parseStrokeWidth(ref.line.getAttribute('stroke-width')) || DEFAULTS.width;
+    const marker = ensureMarker(svg, boardIdx, color, stripedHead(boardIdx));
+    // Half a regular arrow, outline and all: where the head ends, how long a
+    // stripe runs and how big the arrowhead comes out all follow from it.
+    const stripeWidth = lineWidth(width || parseStrokeWidth(ref.line.getAttribute('stroke-width')) || DEFAULTS.width);
+    const borderWidth = lineWidth(settings.borderWidth) || 0;
+    const labels = [];
     const made = moves.map(m => {
       const g = document.createElementNS(SVG_NS, 'g');
       g.setAttribute(EXTRA, '');
-      // Fading by the group, as with lichess's arrows, so the outline does
-      // not show through the shaft.
-      g.setAttribute('opacity', String(depthOpacity(m.ply, settings.lineDepth, settings.opacity)));
+      // Faded by the group, as with lichess's arrows, so the outline does not
+      // show through the shaft.
+      g.setAttribute('opacity', String(lineOpacity(settings.opacity)));
 
       // Striped, so an arrow the extension drew is never mistaken for one
       // lichess drew. The arrow is split where the arrowhead's back edge
@@ -296,7 +379,7 @@
       const cut = splitAtHead(m.at.x1, m.at.y1, m.at.x2, m.at.y2, stripeWidth);
       const lines = [];
       if (cut && cut.shaft) {
-        const shaft = newLine(ref.line, cut.shaft, color, width);
+        const shaft = newLine(ref.line, cut.shaft, color, stripeWidth);
         shaft.removeAttribute('marker-end');
         shaft.setAttribute('stroke-linecap', 'butt');
         const stripes = stripePattern(stripeWidth, lengthOf(cut.shaft));
@@ -305,17 +388,23 @@
         if (skew) shaft.setAttribute('transform', skew);
         lines.push([shaft, false]);
       }
-      const head = newLine(ref.line, cut ? cut.head : m.at, color, width);
+      const head = newLine(ref.line, cut ? cut.head : m.at, color, stripeWidth);
       head.setAttribute('stroke-linecap', 'butt');
       head.setAttribute('marker-end', `url(#${marker})`);
       lines.push([head, true]);
 
       lines.forEach(([line]) => g.appendChild(line));
       parent.appendChild(g);
-      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead));
+      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead, borderWidth, true));
+      // Clear of the arrow's own edge, outline included.
+      const label = makeLabel((cut && cut.shaft) || m.at, m.ply, color, stripeWidth / 2 + borderWidth);
+      if (label) {
+        parent.appendChild(label);
+        labels.push(label);
+      }
       return g;
     });
-    return { groups: made, parsed: moves };
+    return withLabels(made, labels);
   }
 
   /** Colour per arrow group, or null to leave it alone. */
