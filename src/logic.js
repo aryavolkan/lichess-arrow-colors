@@ -8,14 +8,22 @@
   const BEST_BRUSH = 'paleBlue';
   const ALT_BRUSH = 'paleGrey';
 
-  // Loss in winning chances (0..1) at which an arrow is fully red. Lichess
-  // stops drawing alternative arrows beyond this loss.
+  // Loss in winning chances (0..1) at which an arrow is fully red on the
+  // absolute scale. Lichess stops drawing alternative arrows beyond this loss.
   const MAX_SHIFT = 0.2;
+
+  // Smallest span the normalised gradient will stretch over, so a position
+  // where every move is equal does not get blown up into a full green-to-red
+  // spread over differences that do not matter.
+  const MIN_SPAN = 0.05;
 
   const DEFAULTS = Object.freeze({
     enabled: true,
     // 'eval': green→red by loss vs the best line. 'rank': fixed palette by PV rank.
     mode: 'eval',
+    // Stretch the eval gradient across the losses present in this position
+    // instead of the fixed 0..MAX_SHIFT scale.
+    normalize: true,
     // Rank 1 (best) → rank 5 and beyond (rank mode only).
     colors: ['#22c55e', '#eab308', '#f97316', '#ef4444', '#9ca3af'],
     opacity: 0.65,
@@ -102,10 +110,21 @@
     });
   }
 
-  /** 0 → green, MAX_SHIFT and beyond → red, via yellow. */
-  function colorForShift(shift) {
+  /**
+   * The denominator for the normalised gradient: the worst loss on the board,
+   * floored at MIN_SPAN. Nulls (arrows we leave alone) are ignored.
+   */
+  function spanOf(shifts) {
+    let max = 0;
+    for (const s of shifts || []) if (typeof s === 'number' && s > max) max = s;
+    return Math.max(max, MIN_SPAN);
+  }
+
+  /** 0 → green, `span` and beyond → red, via yellow. */
+  function colorForShift(shift, span) {
     if (shift === null || shift === undefined) return null;
-    const t = Math.min(1, Math.max(0, shift / MAX_SHIFT));
+    const denom = span || MAX_SHIFT;
+    const t = Math.min(1, Math.max(0, shift / denom));
     return `hsl(${Math.round(120 * (1 - t))}, 75%, 42%)`;
   }
 
@@ -147,8 +166,8 @@
 
   const api = {
     parseCgHash, pvKeys, rankArrows, colorForRank,
-    parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth,
-    DEFAULTS, MAX_SHIFT, BEST_BRUSH, ALT_BRUSH,
+    parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
+    DEFAULTS, MAX_SHIFT, MIN_SPAN, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LAC = api;

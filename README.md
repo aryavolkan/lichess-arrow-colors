@@ -12,11 +12,21 @@ lichess already thins arrows for lines that are much worse than the best one.
 ## Two colouring modes
 
 **By how good the move is (default).** Each arrow is shaded on a green to red
-gradient by how much its line gives up against the engine's best line. The best
-move is pure green; an arrow is fully red at the point where lichess stops
-drawing alternatives at all. The measure is lichess's own winning-chances
-curve, taken from the mover's point of view, so the same eval gap shades the
-same way for both colours and mate scores rank above any centipawn score.
+gradient by how much its line gives up against the engine's best line. The
+measure is lichess's own winning-chances curve, taken from the mover's point of
+view, so the same eval gap shades the same way for both colours and mate scores
+rank above any centipawn score.
+
+By default the gradient is stretched across the moves on the board, so the best
+move is green and the weakest arrow shown is red whatever the gap between them.
+This is what makes a forced mate stand out from a merely winning alternative,
+since both sit near the flat end of the winning-chances curve. To stop a
+position where every move is equal from being blown up into a full green to red
+spread, the stretch has a floor: differences smaller than 0.05 winning chances
+leave every arrow green.
+
+Turning the stretch off puts colour on a fixed scale instead, where an arrow
+only reddens when the line is clearly worse than the best one.
 
 **By engine line rank.** The older fixed palette, one colour per multi-PV slot:
 

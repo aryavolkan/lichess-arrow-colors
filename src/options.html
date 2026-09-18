@@ -26,9 +26,9 @@
       <option value="rank">Engine line rank (fixed colours)</option>
     </select>
   </label>
-  <div id="evalHelp" class="note">
-    Each arrow is shaded by how much the line gives up against the engine's best line:
-    pure green for the best move, through yellow, to red for the weakest arrow lichess still draws.
+  <div id="evalHelp">
+    <label><span>Stretch across this position</span><input type="checkbox" id="normalize"></label>
+    <p class="note" id="normalizeHelp"></p>
     <div id="gradient"></div>
   </div>
   <div id="rankColors">

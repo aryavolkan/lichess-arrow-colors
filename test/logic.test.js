@@ -151,3 +151,48 @@ test('colorForShift goes green → yellow → red and clamps', () => {
 test('DEFAULTS mode is eval', () => {
   assert.equal(DEFAULTS.mode, 'eval');
 });
+
+// ---- per-position normalisation ---------------------------------------
+const { spanOf, MIN_SPAN } = require('../src/logic.js');
+
+test('spanOf stretches to the worst loss present', () => {
+  assert.equal(spanOf([0, 0.05, 0.18]), 0.18);
+  assert.equal(spanOf([0, 0.2]), 0.2);
+});
+
+test('spanOf floors at MIN_SPAN so near-equal moves stay green', () => {
+  assert.equal(spanOf([0, 0.001, 0.004]), MIN_SPAN);
+  assert.equal(spanOf([0, 0]), MIN_SPAN);
+  assert.equal(spanOf([]), MIN_SPAN);
+  assert.equal(spanOf([null, undefined, 0]), MIN_SPAN);
+  assert.ok(MIN_SPAN > 0 && MIN_SPAN < MAX_SHIFT);
+});
+
+test('colorForShift takes an optional span and defaults to MAX_SHIFT', () => {
+  assert.equal(colorForShift(0.09, 0.18), 'hsl(60, 75%, 42%)');
+  assert.equal(colorForShift(0.18, 0.18), 'hsl(0, 75%, 42%)');
+  assert.equal(colorForShift(0.5, 0.18), 'hsl(0, 75%, 42%)');
+  assert.equal(colorForShift(0, 0.18), 'hsl(120, 75%, 42%)');
+  assert.equal(colorForShift(0.1), colorForShift(0.1, MAX_SHIFT));
+});
+
+test('normalised: the worst arrow is fully red, the best fully green', () => {
+  const shifts = [0, 0.02, 0.07];
+  const span = spanOf(shifts);
+  const colors = shifts.map(s => colorForShift(s, span));
+  assert.equal(colors[0], 'hsl(120, 75%, 42%)');
+  assert.equal(colors[2], 'hsl(0, 75%, 42%)');
+  assert.ok(colors[1] !== colors[0] && colors[1] !== colors[2]);
+});
+
+test('normalised: two near-equal winning moves stay close to green', () => {
+  const shifts = [0, 0.004];
+  const colors = shifts.map(s => colorForShift(s, spanOf(shifts)));
+  assert.equal(colors[0], 'hsl(120, 75%, 42%)');
+  const hue = Number(/hsl\((\d+)/.exec(colors[1])[1]);
+  assert.ok(hue > 100, `tiny gap should stay green, got hue ${hue}`);
+});
+
+test('DEFAULTS normalize is on', () => {
+  assert.equal(DEFAULTS.normalize, true);
+});

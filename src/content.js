@@ -2,7 +2,7 @@
 // Relies on src/logic.js (loaded first) exposing globalThis.LAC.
 (() => {
   'use strict';
-  const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, DEFAULTS } =
+  const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf, DEFAULTS } =
     globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
@@ -97,7 +97,9 @@
     if (settings.mode === 'rank') {
       return rankArrows(parsed, readPvKeys()).map(rank => colorForRank(rank, settings.colors));
     }
-    return scoreArrows(parsed, readPvs(), turnColor()).map(colorForShift);
+    const shifts = scoreArrows(parsed, readPvs(), turnColor());
+    const span = settings.normalize ? spanOf(shifts) : undefined;
+    return shifts.map(s => colorForShift(s, span));
   }
 
   function apply() {
