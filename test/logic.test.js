@@ -284,3 +284,39 @@ test('borderMarker returns null when there is nothing to outline', () => {
   assert.equal(borderMarker(null, 0.03), null);
   assert.equal(borderMarker(0.1875, 0), null);
 });
+
+// ---- one width for every arrow ----------------------------------------
+const { arrowStrokeWidth, UNIFORM_WIDTH } = require('../src/logic.js');
+
+test('UNIFORM_WIDTH is the width lichess gives a full-strength arrow', () => {
+  // chessground's paleBlue/paleGrey brushes are lineWidth 15, and it divides
+  // by 64 to get board units. Thinner arrows come from a per-line modifier.
+  assert.equal(UNIFORM_WIDTH, 15 / 64);
+});
+
+test('arrowStrokeWidth gives every arrow the same width when asked', () => {
+  assert.equal(arrowStrokeWidth(0.1875, true), UNIFORM_WIDTH);
+  assert.equal(arrowStrokeWidth(0.03125, true), UNIFORM_WIDTH);
+  assert.equal(arrowStrokeWidth(0.234375, true), UNIFORM_WIDTH);
+  assert.equal(arrowStrokeWidth(null, true), UNIFORM_WIDTH);
+});
+
+test('arrowStrokeWidth keeps lichess widths when not asked', () => {
+  assert.equal(arrowStrokeWidth(0.1875, false), 0.1875);
+  assert.equal(arrowStrokeWidth(0.03125, false), 0.03125);
+  assert.equal(arrowStrokeWidth(null, false), null);
+});
+
+test('same width in, same outline out', () => {
+  const b = 0.03;
+  const widths = [0.1875, 0.03125, 0.234375].map(w => arrowStrokeWidth(w, true));
+  const outlines = widths.map(w => borderStrokeWidth(w, b));
+  const heads = widths.map(w => borderMarker(w, b).scale * borderStrokeWidth(w, b));
+  assert.equal(new Set(widths).size, 1);
+  assert.equal(new Set(outlines).size, 1);
+  assert.equal(new Set(heads.map(h => h.toFixed(12))).size, 1);
+});
+
+test('DEFAULTS give every arrow one width', () => {
+  assert.equal(DEFAULTS.uniformWidth, true);
+});

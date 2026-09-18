@@ -3,7 +3,7 @@
 (() => {
   'use strict';
   const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf,
-    parseStrokeWidth, borderStrokeWidth, borderMarker, DEFAULTS } = globalThis.LAC;
+    parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -88,7 +88,13 @@
     return id;
   }
 
-  const ORIG_ATTRS = ['stroke', 'marker-end', 'opacity'];
+  const ORIG_ATTRS = ['stroke', 'marker-end', 'opacity', 'stroke-width'];
+
+  /** What lichess had on the line before we touched it. */
+  function origAttr(line, attr) {
+    const raw = line.getAttribute('data-lac-orig');
+    return raw ? JSON.parse(raw)[ORIG_ATTRS.indexOf(attr)] : null;
+  }
 
   /**
    * Fade the whole arrow via its group rather than per line. Painting a
@@ -112,9 +118,9 @@
   }
 
   /**
-   * Draw the outline as a wider copy of the arrow sitting beneath it. Because
-   * markers scale with stroke-width, the wider line also gets a wider
-   * arrowhead, so the head is outlined along with the shaft.
+   * Draw the outline as a wider copy of the arrow sitting beneath it. That
+   * handles the shaft; the head needs its own marker, built by borderMarker,
+   * because a wider stroke would inflate the head rather than outline it.
    */
   function addBorder(svg, boardIdx, group, line) {
     const arrowWidth = parseStrokeWidth(line.getAttribute('stroke-width'));
@@ -144,6 +150,10 @@
     line.setAttribute('stroke', color);
     line.setAttribute('marker-end', `url(#${markerRef})`);
     line.setAttribute('opacity', '1');
+    // Measure from lichess's own width, not from a width we already set, or
+    // turning this off would leave the arrows at the size we gave them.
+    const width = arrowStrokeWidth(parseStrokeWidth(origAttr(line, 'stroke-width')), settings.uniformWidth);
+    if (width) line.setAttribute('stroke-width', String(width));
   }
 
   function restore(group) {
@@ -179,7 +189,7 @@
           if (g.hasAttribute('data-lac')) restore(g);
           return;
         }
-        const stamp = [color, settings.opacity, settings.border, settings.borderColor, settings.borderWidth].join(':');
+        const stamp = [color, settings.opacity, settings.uniformWidth, settings.border, settings.borderColor, settings.borderWidth].join(':');
         if (g.getAttribute('data-lac') === stamp) return;
         g.setAttribute('data-lac', stamp);
         clearBorders(g);
