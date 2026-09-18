@@ -320,3 +320,33 @@ test('the default arrow is thinner than lichess\'s full-strength one', () => {
   assert.ok(DEFAULTS.width < 15 / 64, 'should be thinner than lichess');
   assert.ok(DEFAULTS.width > 4 / 64, 'but still clearly visible');
 });
+
+// ---- draw order --------------------------------------------------------
+const { drawOrder } = require('../src/logic.js');
+
+test('drawOrder draws the longest arrow first, so shorter ones land on top', () => {
+  const arrows = [
+    { orig: 'e2', dest: 'e3' },   // 1 square
+    { orig: 'a1', dest: 'h8' },   // 7 squares diagonally
+    { orig: 'd2', dest: 'd4' },   // 2 squares
+  ];
+  assert.deepEqual(drawOrder(arrows), [1, 2, 0]);
+});
+
+test('drawOrder keeps equally long arrows in the order lichess gave them', () => {
+  const arrows = [
+    { orig: 'b1', dest: 'c3' },
+    { orig: 'g1', dest: 'f3' },
+    { orig: 'e2', dest: 'e4' },
+  ];
+  assert.deepEqual(drawOrder(arrows), [0, 1, 2]);
+});
+
+test('drawOrder puts circles and unreadable shapes on top of every arrow', () => {
+  const arrows = [
+    { orig: 'e4', dest: null },
+    { orig: 'e2', dest: 'e4' },
+    null,
+  ];
+  assert.deepEqual(drawOrder(arrows), [1, 0, 2]);
+});

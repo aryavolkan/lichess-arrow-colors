@@ -2,7 +2,7 @@
 // Relies on src/logic.js (loaded first) exposing globalThis.LAC.
 (() => {
   'use strict';
-  const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf,
+  const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf, drawOrder,
     parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
@@ -177,12 +177,29 @@
     return shifts.map(s => colorForShift(s, span));
   }
 
+  /**
+   * An SVG paints in document order, so the arrow lichess lists last covers
+   * every arrow it crosses. Redraw longest first instead: a long arrow has
+   * plenty of shaft left to read, a short one has almost none, so the short
+   * one wins the overlap. chessground diffs its shapes by cgHash rather than
+   * by position, so moving the groups about does not confuse it.
+   */
+  function reorder(groups, parsed) {
+    const parent = groups[0].parentNode;
+    if (groups.some(g => g.parentNode !== parent)) return;
+    const sorted = drawOrder(parsed).map(i => groups[i]);
+    // Moving nodes is itself a mutation, and the observer would send us
+    // straight back here, so only touch the DOM when the order really changes.
+    if (sorted.every((g, i) => g === groups[i])) return;
+    sorted.forEach(g => parent.appendChild(g));
+  }
+
   function apply() {
     boardSvgs().forEach((svg, boardIdx) => {
       const groups = Array.from(svg.querySelectorAll(':scope > g > g[cgHash]'));
-      const colors = settings.enabled
-        ? colorsFor(groups.map(g => parseCgHash(g.getAttribute('cgHash'))))
-        : groups.map(() => null);
+      const parsed = groups.map(g => parseCgHash(g.getAttribute('cgHash')));
+      const colors = settings.enabled ? colorsFor(parsed) : groups.map(() => null);
+      if (settings.enabled && groups.length > 1) reorder(groups, parsed);
       groups.forEach((g, i) => {
         const color = colors[i];
         if (!color) {

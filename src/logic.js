@@ -228,13 +228,33 @@
     });
   }
 
+  /** How far an arrow travels, in squares squared. Circles count as 0. */
+  function arrowLength(a) {
+    if (!a || !a.dest || !SQUARE.test(a.orig) || !SQUARE.test(a.dest)) return 0;
+    const dx = a.dest.charCodeAt(0) - a.orig.charCodeAt(0);
+    const dy = a.dest.charCodeAt(1) - a.orig.charCodeAt(1);
+    return dx * dx + dy * dy;
+  }
+
+  /**
+   * The order to paint arrows in: longest first, so a short arrow is never
+   * buried under a long one crossing it. Ties keep lichess's own order, and
+   * circles (length 0) end up on top of every arrow.
+   * Returns indices into `arrows`.
+   */
+  function drawOrder(arrows) {
+    return (arrows || [])
+      .map((a, i) => i)
+      .sort((i, j) => arrowLength(arrows[j]) - arrowLength(arrows[i]));
+  }
+
   function colorForRank(rank, palette) {
     if (rank < 0 || !palette || !palette.length) return null;
     return palette[Math.min(rank, palette.length - 1)];
   }
 
   const api = {
-    parseCgHash, pvKeys, rankArrows, colorForRank,
+    parseCgHash, pvKeys, rankArrows, colorForRank, arrowLength, drawOrder,
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
     parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, BEST_BRUSH, ALT_BRUSH,

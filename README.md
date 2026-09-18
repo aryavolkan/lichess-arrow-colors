@@ -62,6 +62,12 @@ whole way round, including the arrowhead, and adding it does not change the
 size of the arrow itself. Its colour and thickness are adjustable. Turn it off on the
 options page if you prefer lichess's plain arrows.
 
+## Overlapping arrows
+
+Arrows are drawn longest first, so where two cross, the shorter one lies on
+top. A long arrow still reads from the length of shaft either side of the
+crossing; a one-square arrow buried under it does not.
+
 ## Install
 
 1. Clone or download this folder.
@@ -103,6 +109,10 @@ Colours and opacity can be changed from the extension's options page
 - Arrows are faded through their group rather than per line. Fading each line
   on its own would let the outline show through the arrow body and muddy the
   colour.
+- An SVG paints in document order, so the arrow lichess lists last covers the
+  ones it crosses. The extension reorders the arrow groups longest first,
+  leaving short arrows on top. chessground diffs its shapes by `cgHash` rather
+  than by position, so moving the groups does not disturb it.
 - Threat-mode arrows (red), hand-drawn arrows and variation arrows are not
   touched.
 
