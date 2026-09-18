@@ -84,18 +84,30 @@ Not required, since no data is collected. If the form insists, the repository
 README and this file serve as the statement: no data is collected, stored off
 device, or shared.
 
-## Screenshots (you need to add these)
+## Screenshots
 
-The store wants at least one screenshot, either 1280x800 or 640x400. I could
-not produce these because the browser pane I test in caps screenshots at 800
-pixels wide. To take them:
+Ready to upload, in `store/screenshots/`:
 
-1. Load the extension (see the README), open a lichess analysis board, and turn
-   the engine on with three or more lines.
-2. Pick a position where the moves differ in quality, so the colours spread out.
-   `r1bqkb1r/pppp1ppp/2n2n2/4p1N1/2B1P3/8/PPPP1PPP/RNBQK2R b KQkq - 5 4` gives a
-   clean green through red spread.
-3. Capture the window at 1280x800.
+| File | Size | Shows |
+|------|------|-------|
+| `arrows-spread-640x400.png` | 640x400 | Moves of clearly different quality, so the arrows run green to red |
+| `arrows-equal-640x400.png` | 640x400 | A position where every move is about equal, so nothing turns red |
+| `arrows-spread-1280x800.png` | 1280x800 | The same spread, with more of the page |
+| `arrows-equal-1280x800.png` | 1280x800 | The same equal position, with more of the page |
 
-Two or three shots work well: the board with arrows, a position where everything
-is equal so the arrows stay green, and the options page.
+The 640x400 pair is better framed; the board fills the picture. Upload one pair
+or the other, not a mix of sizes.
+
+Regenerate them with:
+
+```bash
+node scripts/shoot.js                      # 1280x800
+node scripts/shoot.js --width 640 --height 400
+```
+
+That script launches Chrome, opens a real lichess analysis board, waits for the
+engine, and captures the page. Chrome 153 refuses to load an unpacked extension
+from the command line, so the script runs `src/logic.js` and `src/content.js` in
+the page instead. It is the same code the extension ships, with the same default
+settings, so the picture matches what an installed copy draws. The script prints
+which path it took.
