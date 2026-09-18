@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Lichess Arrow Colors",
+  "version": "1.0.0",
+  "description": "Colour-codes lichess.org engine suggestion arrows by rank: best line green, then yellow, orange, red.",
+  "permissions": ["storage"],
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://lichess.org/*"],
+      "js": ["src/logic.js", "src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": { "page": "src/options.html", "open_in_tab": false }
+}

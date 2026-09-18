@@ -1,0 +1,10 @@
+{
+  "name": "lichess-arrow-colors",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that colour-codes lichess engine arrows by rank",
+  "scripts": {
+    "test": "node --test test/",
+    "icons": "python3 scripts/make_icons.py"
+  }
+}
