@@ -85,8 +85,9 @@ drawing: a faded one takes on whatever it happens to lie over, and one buried
 under a crossing arrow is not there at all.
 
 Both sides' moves are drawn, since a line only makes sense with the replies in
-it. Five moves past the first are drawn by default; the slider on the options
-page goes up to eight, and zero turns the whole thing off.
+it. Four moves past the first are drawn by default, numbered 2 to 5; the
+slider on the options page goes up to eight, and zero turns the whole thing
+off.
 
 These arrows are finely striped, since they are the one thing on the board
 lichess did not put there: a solid arrow is always a move an engine line

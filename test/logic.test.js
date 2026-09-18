@@ -604,8 +604,8 @@ test('splitAtHead has nothing to split without an arrow', () => {
   assert.equal(stripeTransform(0, 0, 0, 0, 20), null);
 });
 
-test('DEFAULTS draws five moves of the best line', () => {
-  assert.equal(DEFAULTS.lineDepth, 5);
+test('DEFAULTS draws four moves of the best line, numbered 2 to 5', () => {
+  assert.equal(DEFAULTS.lineDepth, 4);
 });
 
 const { darker } = require('../src/logic.js');

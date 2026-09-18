@@ -46,8 +46,8 @@
     // instead of the fixed 0..MAX_SHIFT scale.
     normalize: true,
     // How many moves of the best line to draw past the one lichess draws
-    // itself. 0 leaves the board as lichess has it.
-    lineDepth: 5,
+    // itself, which numbers them 2 to 5. 0 leaves the board as lichess has it.
+    lineDepth: 4,
     // Outline drawn under each arrow. borderWidth is per side, in board units
     // where one square is 1 (chessground's own stroke-width unit).
     // Give every engine arrow the same width. Colour already says how good a
