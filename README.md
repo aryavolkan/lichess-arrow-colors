@@ -41,6 +41,13 @@ only reddens when the line is clearly worse than the best one.
 Pick a mode on the options page. Rank colours are editable there; the gradient
 is fixed.
 
+## Outlines
+
+Arrows are outlined in black by default, which keeps them legible over pieces
+and over both light and dark squares. The outline follows the arrowhead as well
+as the shaft, and its colour and thickness are adjustable. Turn it off on the
+options page if you prefer lichess's plain arrows.
+
 ## Install
 
 1. Clone or download this folder.
@@ -68,6 +75,13 @@ Colours and opacity can be changed from the extension's options page
 - When a row's evaluation is not shown (lichess hides it with a single engine
   line), the arrow's line width is used instead, since lichess derives that
   width from the same quantity.
+- The outline is a wider copy of the arrow drawn underneath it. Arrowhead
+  markers scale with stroke width, so the wider copy gets a bigger head for
+  free; its anchor point is shifted so the outline is as thick past the tip as
+  it is along the sides.
+- Arrows are faded through their group rather than per line. Fading each line
+  on its own would let the outline show through the arrow body and muddy the
+  colour.
 - Threat-mode arrows (red), hand-drawn arrows and variation arrows are not
   touched.
 

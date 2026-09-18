@@ -196,3 +196,53 @@ test('normalised: two near-equal winning moves stay close to green', () => {
 test('DEFAULTS normalize is on', () => {
   assert.equal(DEFAULTS.normalize, true);
 });
+
+// ---- arrow borders -----------------------------------------------------
+const { parseStrokeWidth, borderStrokeWidth } = require('../src/logic.js');
+
+test('parseStrokeWidth reads chessground stroke widths', () => {
+  assert.equal(parseStrokeWidth('0.1875'), 0.1875);
+  assert.equal(parseStrokeWidth('0.234375'), 0.234375);
+  assert.equal(parseStrokeWidth(null), null);
+  assert.equal(parseStrokeWidth(''), null);
+  assert.equal(parseStrokeWidth('none'), null);
+  assert.equal(parseStrokeWidth('0'), null);
+});
+
+test('borderStrokeWidth widens the arrow by the border on each side', () => {
+  assert.ok(Math.abs(borderStrokeWidth(0.1875, 0.03) - 0.2475) < 1e-9);
+  assert.ok(Math.abs(borderStrokeWidth(0.05, 0.02) - 0.09) < 1e-9);
+});
+
+test('borderStrokeWidth returns null when there is nothing to outline', () => {
+  assert.equal(borderStrokeWidth(0.1875, 0), null);
+  assert.equal(borderStrokeWidth(0.1875, -1), null);
+  assert.equal(borderStrokeWidth(null, 0.03), null);
+  assert.equal(borderStrokeWidth(0, 0.03), null);
+});
+
+test('DEFAULTS carry a sane border', () => {
+  assert.equal(DEFAULTS.border, true);
+  assert.match(DEFAULTS.borderColor, /^#[0-9a-f]{6}$/i);
+  assert.ok(DEFAULTS.borderWidth > 0 && DEFAULTS.borderWidth < 0.2);
+});
+
+const { borderMarkerRefX } = require('../src/logic.js');
+
+test('borderMarkerRefX makes the outline as thick at the tip as at the sides', () => {
+  for (const [w, b] of [[0.1875, 0.03], [0.234375, 0.03], [0.046875, 0.02], [0.171875, 0.05]]) {
+    const wb = borderStrokeWidth(w, b);
+    const refX = borderMarkerRefX(w, b);
+    // chessground's arrowhead tip sits at marker x=3 with refX 2.05, and
+    // markers scale with stroke width, so the tip juts (3 - refX) * width past
+    // the line end. The outline's tip should jut exactly one border further.
+    assert.ok(Math.abs((3 - refX) * wb - ((3 - 2.05) * w + b)) < 1e-9, `w=${w} b=${b}`);
+  }
+});
+
+test('borderMarkerRefX stays within the marker box', () => {
+  assert.ok(borderMarkerRefX(0.01, 0.5) >= 0);
+  assert.ok(borderMarkerRefX(1, 0.001) <= 3);
+  assert.equal(borderMarkerRefX(null, 0.03), null);
+  assert.equal(borderMarkerRefX(0.1875, 0), null);
+});

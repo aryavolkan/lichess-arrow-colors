@@ -24,6 +24,11 @@
     // Stretch the eval gradient across the losses present in this position
     // instead of the fixed 0..MAX_SHIFT scale.
     normalize: true,
+    // Outline drawn under each arrow. borderWidth is per side, in board units
+    // where one square is 1 (chessground's own stroke-width unit).
+    border: true,
+    borderColor: '#000000',
+    borderWidth: 0.03,
     // Rank 1 (best) → rank 5 and beyond (rank mode only).
     colors: ['#22c55e', '#eab308', '#f97316', '#ef4444', '#9ca3af'],
     opacity: 0.65,
@@ -128,6 +133,39 @@
     return `hsl(${Math.round(120 * (1 - t))}, 75%, 42%)`;
   }
 
+  /** chessground writes stroke-width as a plain number in board units. */
+  function parseStrokeWidth(value) {
+    const w = parseFloat(value);
+    return Number.isFinite(w) && w > 0 ? w : null;
+  }
+
+  /**
+   * Width of the outline drawn beneath an arrow: the arrow's own width plus
+   * the border on each side. Null when there is nothing to outline.
+   */
+  function borderStrokeWidth(arrowWidth, borderWidth) {
+    if (!arrowWidth || arrowWidth <= 0) return null;
+    if (!borderWidth || borderWidth <= 0) return null;
+    return arrowWidth + 2 * borderWidth;
+  }
+
+  // chessground's arrowhead: tip at marker x=3, anchored at refX, scaled by
+  // stroke width. So the tip juts (3 - refX) * width beyond the line end.
+  const CG_TIP_X = 3;
+  const CG_REF_X = 2.05;
+
+  /**
+   * refX for the outline's arrowhead, chosen so the outline is as thick past
+   * the arrow's tip as it is along its sides. Without this the outline's head,
+   * being wider, would jut disproportionately far ahead.
+   */
+  function borderMarkerRefX(arrowWidth, borderWidth) {
+    const wide = borderStrokeWidth(arrowWidth, borderWidth);
+    if (!wide) return null;
+    const reach = (CG_TIP_X - CG_REF_X) * arrowWidth + borderWidth;
+    return Math.min(CG_TIP_X, Math.max(0, CG_TIP_X - reach / wide));
+  }
+
   /**
    * Turn the raw first-move strings from the PV box into "e2e4"-style keys
    * in rank order. Accepts plain UCI ("e7e8q") or "fen|uci" data-board
@@ -167,6 +205,7 @@
   const api = {
     parseCgHash, pvKeys, rankArrows, colorForRank,
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
+    parseStrokeWidth, borderStrokeWidth, borderMarkerRefX,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -9,7 +9,7 @@
     label { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
     label span { flex: 1; }
     input[type=color] { width: 44px; height: 28px; padding: 0; border: 1px solid #aaa; }
-    #opacityValue { width: 3em; text-align: right; }
+    #opacityValue, #borderWidthValue { width: 3em; text-align: right; }
     button { margin-top: 12px; }
     .note { color: #666; font-size: 12px; margin-top: 12px; }
     select { flex: 1; }
@@ -39,6 +39,11 @@
   <label><span>Rank 5 and below</span><input type="color" data-rank="4"></label>
   </div>
   <label><span>Opacity</span><input type="range" id="opacity" min="0.1" max="1" step="0.05"><output id="opacityValue"></output></label>
+  <label><span>Outline arrows</span><input type="checkbox" id="border"></label>
+  <div id="borderOpts">
+    <label><span>Outline colour</span><input type="color" id="borderColor"></label>
+    <label><span>Outline thickness</span><input type="range" id="borderWidth" min="0.01" max="0.08" step="0.005"><output id="borderWidthValue"></output></label>
+  </div>
   <button id="reset">Reset to defaults</button>
   <p class="note">Changes apply immediately on open lichess tabs. Threat-mode and hand-drawn arrows are left untouched.</p>
   <script src="logic.js"></script>

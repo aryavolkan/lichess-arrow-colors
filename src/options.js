@@ -4,9 +4,14 @@
   const enabled = document.getElementById('enabled');
   const opacity = document.getElementById('opacity');
   const opacityValue = document.getElementById('opacityValue');
-  const colorInputs = Array.from(document.querySelectorAll('input[type=color]'));
+  const colorInputs = Array.from(document.querySelectorAll('input[type=color][data-rank]'));
   const mode = document.getElementById('mode');
   const normalize = document.getElementById('normalize');
+  const border = document.getElementById('border');
+  const borderOpts = document.getElementById('borderOpts');
+  const borderColor = document.getElementById('borderColor');
+  const borderWidth = document.getElementById('borderWidth');
+  const borderWidthValue = document.getElementById('borderWidthValue');
   const normalizeHelp = document.getElementById('normalizeHelp');
 
   const HELP = {
@@ -25,6 +30,11 @@
     enabled.checked = s.enabled;
     mode.value = s.mode;
     normalize.checked = s.normalize;
+    border.checked = s.border;
+    borderColor.value = s.borderColor;
+    borderWidth.value = s.borderWidth;
+    borderWidthValue.value = Number(s.borderWidth).toFixed(3);
+    borderOpts.hidden = !s.border;
     normalizeHelp.textContent = s.normalize ? HELP.on : HELP.off;
     rankColors.hidden = s.mode !== 'rank';
     evalHelp.hidden = s.mode !== 'eval';
@@ -38,6 +48,9 @@
       enabled: enabled.checked,
       mode: mode.value,
       normalize: normalize.checked,
+      border: border.checked,
+      borderColor: borderColor.value,
+      borderWidth: Number(borderWidth.value),
       opacity: Number(opacity.value),
       colors: colorInputs.map(i => i.value),
     };
@@ -45,11 +58,13 @@
     rankColors.hidden = s.mode !== 'rank';
     evalHelp.hidden = s.mode !== 'eval';
     normalizeHelp.textContent = s.normalize ? HELP.on : HELP.off;
+    borderWidthValue.value = s.borderWidth.toFixed(3);
+    borderOpts.hidden = !s.border;
     chrome.storage.sync.set(s);
   }
 
   chrome.storage.sync.get(DEFAULTS, stored => render({ ...DEFAULTS, ...stored }));
-  [enabled, mode, normalize, opacity, ...colorInputs].forEach(el => el.addEventListener('input', save));
+  [enabled, mode, normalize, opacity, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
   document.getElementById('reset').addEventListener('click', () => {
     chrome.storage.sync.set({ ...DEFAULTS, colors: [...DEFAULTS.colors] });
     render(DEFAULTS);

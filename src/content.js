@@ -2,8 +2,8 @@
 // Relies on src/logic.js (loaded first) exposing globalThis.LAC.
 (() => {
   'use strict';
-  const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf, DEFAULTS } =
-    globalThis.LAC;
+  const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf,
+    parseStrokeWidth, borderStrokeWidth, borderMarkerRefX, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -48,8 +48,9 @@
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   /** One arrowhead marker per colour, created on demand. Returns its id. */
-  function ensureMarker(svg, boardIdx, color) {
-    const id = `lac-${boardIdx}-${color.replace(/[^a-z0-9]/gi, '')}`;
+  function ensureMarker(svg, boardIdx, color, prefix, refX) {
+    const anchor = refX === undefined ? 2.05 : refX;
+    const id = `lac-${prefix || 'a'}${boardIdx}-${color.replace(/[^a-z0-9]/gi, '')}-${anchor.toFixed(4)}`;
     let defs = svg.querySelector('defs');
     if (!defs) {
       defs = document.createElementNS(SVG_NS, 'defs');
@@ -58,7 +59,7 @@
     if (!defs.querySelector(`marker[id="${id}"]`)) {
       // Same geometry chessground uses, so heads line up with the shaft.
       const marker = document.createElementNS(SVG_NS, 'marker');
-      for (const [k, v] of Object.entries({ id, cgKey: id, orient: 'auto', overflow: 'visible', markerWidth: 4, markerHeight: 4, refX: 2.05, refY: 2 })) {
+      for (const [k, v] of Object.entries({ id, cgKey: id, orient: 'auto', overflow: 'visible', markerWidth: 4, markerHeight: 4, refX: anchor, refY: 2 })) {
         marker.setAttribute(k, v);
       }
       const path = document.createElementNS(SVG_NS, 'path');
@@ -74,17 +75,66 @@
 
   const ORIG_ATTRS = ['stroke', 'marker-end', 'opacity'];
 
+  /**
+   * Fade the whole arrow via its group rather than per line. Painting a
+   * translucent arrow over its own outline would let the outline show through
+   * the body and muddy the colour; an opaque arrow inside a faded group keeps
+   * the outline at the edges where it belongs.
+   */
+  function setGroupOpacity(group) {
+    if (!group.hasAttribute('data-lac-gop')) {
+      group.setAttribute('data-lac-gop', group.getAttribute('opacity') ?? '');
+    }
+    group.setAttribute('opacity', String(settings.opacity));
+  }
+
+  function restoreGroupOpacity(group) {
+    if (!group.hasAttribute('data-lac-gop')) return;
+    const orig = group.getAttribute('data-lac-gop');
+    if (orig) group.setAttribute('opacity', orig);
+    else group.removeAttribute('opacity');
+    group.removeAttribute('data-lac-gop');
+  }
+
+  /**
+   * Draw the outline as a wider copy of the arrow sitting beneath it. Because
+   * markers scale with stroke-width, the wider line also gets a wider
+   * arrowhead, so the head is outlined along with the shaft.
+   */
+  function addBorder(svg, boardIdx, group, line) {
+    const arrowWidth = parseStrokeWidth(line.getAttribute('stroke-width'));
+    const width = borderStrokeWidth(arrowWidth, settings.borderWidth);
+    if (!width) return;
+    const border = line.cloneNode(false);
+    border.removeAttribute('data-lac-orig');
+    border.setAttribute('data-lac-border', '');
+    border.setAttribute('stroke', settings.borderColor);
+    border.setAttribute('stroke-width', String(width));
+    border.setAttribute('opacity', '1');
+    const refX = borderMarkerRefX(arrowWidth, settings.borderWidth);
+    border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, settings.borderColor, 'b', refX)})`);
+    group.insertBefore(border, group.firstChild);
+  }
+
+  const ownLines = group => Array.from(group.querySelectorAll('line:not([data-lac-border])'));
+
+  function clearBorders(group) {
+    group.querySelectorAll('line[data-lac-border]').forEach(el => el.remove());
+  }
+
   function paint(line, color, markerRef) {
     if (!line.hasAttribute('data-lac-orig')) {
       line.setAttribute('data-lac-orig', JSON.stringify(ORIG_ATTRS.map(a => line.getAttribute(a))));
     }
     line.setAttribute('stroke', color);
     line.setAttribute('marker-end', `url(#${markerRef})`);
-    line.setAttribute('opacity', String(settings.opacity));
+    line.setAttribute('opacity', '1');
   }
 
   function restore(group) {
     group.removeAttribute('data-lac');
+    clearBorders(group);
+    restoreGroupOpacity(group);
     group.querySelectorAll('line[data-lac-orig]').forEach(line => {
       const orig = JSON.parse(line.getAttribute('data-lac-orig'));
       ORIG_ATTRS.forEach((a, i) => (orig[i] == null ? line.removeAttribute(a) : line.setAttribute(a, orig[i])));
@@ -114,11 +164,16 @@
           if (g.hasAttribute('data-lac')) restore(g);
           return;
         }
-        const stamp = `${color}:${settings.opacity}`;
+        const stamp = [color, settings.opacity, settings.border, settings.borderColor, settings.borderWidth].join(':');
         if (g.getAttribute('data-lac') === stamp) return;
         g.setAttribute('data-lac', stamp);
+        clearBorders(g);
+        setGroupOpacity(g);
         const marker = ensureMarker(svg, boardIdx, color);
-        g.querySelectorAll('line').forEach(line => paint(line, color, marker));
+        ownLines(g).forEach(line => {
+          paint(line, color, marker);
+          if (settings.border) addBorder(svg, boardIdx, g, line);
+        });
       });
     });
   }
@@ -158,5 +213,7 @@
     }
   });
 
-  globalThis.__lacApply = apply; // handy for manual testing in devtools
+  // Debug hooks, for poking at the extension from devtools.
+  globalThis.__lacApply = apply;
+  globalThis.__lacSettings = settings;
 })();
