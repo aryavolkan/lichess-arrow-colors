@@ -2,7 +2,8 @@
 // Relies on src/logic.js (loaded first) exposing globalThis.LAC.
 (() => {
   'use strict';
-  const { parseCgHash, pvKeys, rankArrows, colorForRank, DEFAULTS } = globalThis.LAC;
+  const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, DEFAULTS } =
+    globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -10,11 +11,31 @@
 
   // ---- reading lichess state -------------------------------------------
 
+  const rowMove = row =>
+    row.getAttribute('data-uci') || row.querySelector('.pv-san')?.getAttribute('data-board') || '';
+
+  function pvRows() {
+    return Array.from(document.querySelectorAll('.pv_box .pv'));
+  }
+
   function readPvKeys() {
-    const rows = document.querySelectorAll('.pv_box .pv');
-    return pvKeys(
-      Array.from(rows, row => row.getAttribute('data-uci') || row.querySelector('.pv-san')?.getAttribute('data-board') || ''),
-    );
+    return pvKeys(pvRows().map(rowMove));
+  }
+
+  /** [{ key, eval }] in rank order. The eval is white POV, as lichess renders it. */
+  function readPvs() {
+    return pvRows()
+      .map(row => ({
+        key: pvKeys([rowMove(row)])[0],
+        eval: parseEvalText(row.querySelector('strong')?.textContent || ''),
+      }))
+      .filter(pv => pv.key);
+  }
+
+  /** Side to move, from the FEN on the engine panel. Defaults to white. */
+  function turnColor() {
+    const fen = document.querySelector('.pv_box')?.getAttribute('data-fen') || '';
+    return fen.split(' ')[1] === 'b' ? 'black' : 'white';
   }
 
   function boardSvgs() {
@@ -25,30 +46,28 @@
   // ---- svg markers (arrowheads) ----------------------------------------
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
-  const markerId = (boardIdx, rank) => `lac-${boardIdx}-${Math.min(rank, settings.colors.length - 1)}`;
 
-  function ensureMarkers(svg, boardIdx) {
+  /** One arrowhead marker per colour, created on demand. Returns its id. */
+  function ensureMarker(svg, boardIdx, color) {
+    const id = `lac-${boardIdx}-${color.replace(/[^a-z0-9]/gi, '')}`;
     let defs = svg.querySelector('defs');
     if (!defs) {
       defs = document.createElementNS(SVG_NS, 'defs');
       svg.insertBefore(defs, svg.firstChild);
     }
-    settings.colors.forEach((color, rank) => {
-      const id = markerId(boardIdx, rank);
-      let marker = defs.querySelector(`marker[id="${id}"]`);
-      if (!marker) {
-        // Same geometry chessground uses, so heads line up with the shaft.
-        marker = document.createElementNS(SVG_NS, 'marker');
-        for (const [k, v] of Object.entries({ id, cgKey: id, orient: 'auto', overflow: 'visible', markerWidth: 4, markerHeight: 4, refX: 2.05, refY: 2 })) {
-          marker.setAttribute(k, v);
-        }
-        const path = document.createElementNS(SVG_NS, 'path');
-        path.setAttribute('d', 'M0,0 V4 L3,2 Z');
-        marker.appendChild(path);
-        defs.appendChild(marker);
+    if (!defs.querySelector(`marker[id="${id}"]`)) {
+      // Same geometry chessground uses, so heads line up with the shaft.
+      const marker = document.createElementNS(SVG_NS, 'marker');
+      for (const [k, v] of Object.entries({ id, cgKey: id, orient: 'auto', overflow: 'visible', markerWidth: 4, markerHeight: 4, refX: 2.05, refY: 2 })) {
+        marker.setAttribute(k, v);
       }
-      marker.firstChild.setAttribute('fill', color);
-    });
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', 'M0,0 V4 L3,2 Z');
+      path.setAttribute('fill', color);
+      marker.appendChild(path);
+      defs.appendChild(marker);
+    }
+    return id;
   }
 
   // ---- recolouring -----------------------------------------------------
@@ -73,24 +92,31 @@
     });
   }
 
+  /** Colour per arrow group, or null to leave it alone. */
+  function colorsFor(parsed) {
+    if (settings.mode === 'rank') {
+      return rankArrows(parsed, readPvKeys()).map(rank => colorForRank(rank, settings.colors));
+    }
+    return scoreArrows(parsed, readPvs(), turnColor()).map(colorForShift);
+  }
+
   function apply() {
-    const keys = settings.enabled ? readPvKeys() : [];
     boardSvgs().forEach((svg, boardIdx) => {
-      if (settings.enabled) ensureMarkers(svg, boardIdx);
       const groups = Array.from(svg.querySelectorAll(':scope > g > g[cgHash]'));
-      const ranks = settings.enabled
-        ? rankArrows(groups.map(g => parseCgHash(g.getAttribute('cgHash'))), keys)
-        : groups.map(() => -1);
+      const colors = settings.enabled
+        ? colorsFor(groups.map(g => parseCgHash(g.getAttribute('cgHash'))))
+        : groups.map(() => null);
       groups.forEach((g, i) => {
-        const color = colorForRank(ranks[i], settings.colors);
+        const color = colors[i];
         if (!color) {
           if (g.hasAttribute('data-lac')) restore(g);
           return;
         }
-        const stamp = `${ranks[i]}:${color}:${settings.opacity}`;
+        const stamp = `${color}:${settings.opacity}`;
         if (g.getAttribute('data-lac') === stamp) return;
         g.setAttribute('data-lac', stamp);
-        g.querySelectorAll('line').forEach(line => paint(line, color, markerId(boardIdx, ranks[i])));
+        const marker = ensureMarker(svg, boardIdx, color);
+        g.querySelectorAll('line').forEach(line => paint(line, color, marker));
       });
     });
   }
