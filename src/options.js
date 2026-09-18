@@ -19,8 +19,12 @@
   const normalizeHelp = document.getElementById('normalizeHelp');
   const lineDepth = document.getElementById('lineDepth');
   const lineDepthValue = document.getElementById('lineDepthValue');
+  const lineOpts = document.getElementById('lineOpts');
+  const lineOpacity = document.getElementById('lineOpacity');
+  const lineOpacityValue = document.getElementById('lineOpacityValue');
 
   const depthLabel = n => (n > 0 ? String(n) : 'off');
+  const percent = n => Math.round(n * 100) + '%';
 
   const HELP = {
     on: "The best move is green and the weakest arrow on the board is red, whatever the gap between them. Small differences stay green when every move is about equally good.",
@@ -40,9 +44,12 @@
     normalize.checked = s.normalize;
     lineDepth.value = s.lineDepth;
     lineDepthValue.value = depthLabel(s.lineDepth);
+    lineOpacity.value = s.lineOpacity;
+    lineOpacityValue.value = percent(s.lineOpacity);
+    lineOpts.hidden = !s.lineDepth;
     uniformWidth.checked = s.uniformWidth;
     width.value = s.width;
-    widthValue.value = Math.round(s.width * 64);
+    widthValue.value = Math.round(Number(width.value) * 64);
     widthOpts.hidden = !s.uniformWidth;
     border.checked = s.border;
     borderColor.value = s.borderColor;
@@ -63,6 +70,7 @@
       mode: mode.value,
       normalize: normalize.checked,
       lineDepth: Number(lineDepth.value),
+      lineOpacity: Number(lineOpacity.value),
       uniformWidth: uniformWidth.checked,
       width: Number(width.value),
       border: border.checked,
@@ -73,6 +81,8 @@
     };
     opacityValue.value = s.opacity.toFixed(2);
     lineDepthValue.value = depthLabel(s.lineDepth);
+    lineOpacityValue.value = percent(s.lineOpacity);
+    lineOpts.hidden = !s.lineDepth;
     rankColors.hidden = s.mode !== 'rank';
     evalHelp.hidden = s.mode !== 'eval';
     normalizeHelp.textContent = s.normalize ? HELP.on : HELP.off;
@@ -84,7 +94,7 @@
   }
 
   chrome.storage.sync.get(DEFAULTS, stored => render({ ...DEFAULTS, ...stored }));
-  [enabled, mode, normalize, lineDepth, opacity, uniformWidth, width, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
+  [enabled, mode, normalize, lineDepth, lineOpacity, opacity, uniformWidth, width, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
   document.getElementById('reset').addEventListener('click', () => {
     chrome.storage.sync.set({ ...DEFAULTS, colors: [...DEFAULTS.colors] });
     render(DEFAULTS);

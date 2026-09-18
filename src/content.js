@@ -3,9 +3,9 @@
 (() => {
   'use strict';
   const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf, drawOrder,
-    parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth, CG_HEAD,
-    continuationMoves, calibrate, arrowEndpoints, lineOpacity, lineWidth, labelPoint, LABEL_RADIUS, LABEL_FONT,
-    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, BEST_BRUSH, DEFAULTS } = globalThis.LAC;
+    parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth,
+    continuationMoves, lineForArrow, calibrate, arrowEndpoints, labelPoint, LABEL_RADIUS, LABEL_STEP, LABEL_FONT,
+    stripePattern, stripeTransform, splitAtHead, darker, STRIPE_ANGLE, BEST_BRUSH, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -35,12 +35,19 @@
   }
 
   /**
-   * Every move of the best line, in order, as lichess writes it: the panel
-   * gives each move of a PV its own .pv-san carrying "fen|uci" for the board
-   * it previews on hover. The first of them is the move lichess draws.
+   * Every move of the line lichess is pointing at, in order, as it writes
+   * them: the panel gives each move of a PV its own .pv-san carrying
+   * "fen|uci" for the board it previews on hover.
+   *
+   * `key` is the move lichess is drawing with the best brush, which is its
+   * own best line most of the time and the line under the pointer while the
+   * engine panel is being read. Rows are mapped one at a time rather than
+   * through readPvKeys, which drops the ones it cannot read and would shift
+   * every row after the hole.
    */
-  function bestLineMoves() {
-    const row = pvRows()[0];
+  function bestLineMoves(key) {
+    const rows = pvRows();
+    const row = rows[lineForArrow(rows.map(r => pvKeys([rowMove(r)])[0]), key)];
     if (!row) return [];
     const sans = Array.from(row.querySelectorAll('.pv-san')).map(el => el.getAttribute('data-board') || '');
     if (sans.length) return sans;
@@ -76,14 +83,12 @@
       color.replace(/[^a-z0-9]/gi, ''),
       geom.refX.toFixed(4),
       (geom.strokeWidth || 0).toFixed(4),
-      geom.key || '',
     ].join('-');
     let defs = svg.querySelector('defs');
     if (!defs) {
       defs = document.createElementNS(SVG_NS, 'defs');
       svg.insertBefore(defs, svg.firstChild);
     }
-    if (geom.clip) ensureHeadClip(defs, geom.clip);
     if (!defs.querySelector(`marker[id="${id}"]`)) {
       const marker = document.createElementNS(SVG_NS, 'marker');
       for (const [k, v] of Object.entries({
@@ -94,8 +99,7 @@
       }
       const path = document.createElementNS(SVG_NS, 'path');
       path.setAttribute('d', geom.path);
-      path.setAttribute('fill', geom.fill === 'none' ? 'none' : color);
-      if (geom.clip) path.setAttribute('clip-path', `url(#${geom.clip})`);
+      path.setAttribute('fill', color);
       if (geom.strokeWidth) {
         path.setAttribute('stroke', color);
         path.setAttribute('stroke-width', String(geom.strokeWidth));
@@ -106,38 +110,6 @@
     }
     return id;
   }
-
-  /**
-   * The arrowhead's own outline, as a clip for the stripes drawn across it.
-   * One per board: the stripes are in marker units, so the same clip serves
-   * every striped head whatever width it is drawn at.
-   */
-  function ensureHeadClip(defs, id) {
-    if (defs.querySelector(`clipPath[id="${id}"]`)) return;
-    const clip = document.createElementNS(SVG_NS, 'clipPath');
-    clip.setAttribute('id', id);
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d', 'M0,0 V4 L3,2 Z');
-    clip.appendChild(path);
-    defs.appendChild(clip);
-  }
-
-  const bandPath = bands =>
-    bands.map(b => `M${b.map(p => `${p.x},${p.y}`).join(' L')} Z`).join(' ');
-
-  /**
-   * A striped arrowhead: the same stripes the shaft carries, drawn across
-   * the head and clipped to its outline. Its outline comes from the border
-   * marker, which is why that one is drawn unfilled here — a filled black
-   * head would show through the gaps instead of the board.
-   */
-  const stripedHead = boardIdx => ({
-    key: 'st',
-    path: bandPath(headStripes(STRIPE_ANGLE)),
-    refX: CG_HEAD.refX,
-    refY: CG_HEAD.refY,
-    clip: `lac-head-${boardIdx}`,
-  });
 
   const ORIG_ATTRS = ['stroke', 'marker-end', 'opacity', 'stroke-width'];
 
@@ -173,7 +145,7 @@
    * handles the shaft; the head needs its own marker, built by borderMarker,
    * because a wider stroke would inflate the head rather than outline it.
    */
-  function addBorder(svg, boardIdx, group, line, head = true, borderWidth = settings.borderWidth, outlineOnly = false) {
+  function addBorder(svg, boardIdx, group, line, head = true, borderWidth = settings.borderWidth) {
     const arrowWidth = parseStrokeWidth(line.getAttribute('stroke-width'));
     const width = borderStrokeWidth(arrowWidth, borderWidth);
     if (!width) return;
@@ -185,7 +157,6 @@
     border.setAttribute('opacity', '1');
     if (head) {
       const geom = borderMarker(arrowWidth, borderWidth);
-      if (outlineOnly) Object.assign(geom, { fill: 'none', key: 'o' });
       border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, settings.borderColor, geom)})`);
     } else {
       border.removeAttribute('marker-end');
@@ -260,20 +231,38 @@
 
   const lengthOf = at => Math.hypot(at.x2 - at.x1, at.y2 - at.y1);
 
+  /** The shaft of an arrow, which is what a numeral is placed against. */
+  function shaftOf(at, width) {
+    const cut = splitAtHead(at.x1, at.y1, at.x2, at.y2, width);
+    return (cut && cut.shaft) || at;
+  }
+
   /**
-   * The move's place in the best line, as a disc on the shaft. Lichess's own
-   * arrow is the line's first move, so the one after it is 2.
+   * The width one of lichess's own arrows ends up drawn at: its own width, or
+   * the one width every arrow is given. Measured from what lichess had before
+   * we touched it, as paint() does, so reading it back off an arrow we have
+   * already painted gives the same answer.
+   */
+  function drawnWidth(line) {
+    const own = parseStrokeWidth(origAttr(line, 'stroke-width') ?? line.getAttribute('stroke-width'));
+    return arrowStrokeWidth(own, settings.uniformWidth, settings.width);
+  }
+
+  /**
+   * The move's place in the best line, as a disc beside the shaft. Lichess's
+   * own arrow is the line's first move, so it is 1 and the one after it is 2.
    *
    * It goes in a group of its own rather than the arrow's, because the added
-   * arrows are drawn at half a regular arrow's opacity and a number at half
-   * opacity cannot be read.
+   * arrows are drawn faded and a faded number cannot be read.
    */
-  function makeLabel(at, ply, color, clear) {
-    const point = labelPoint(at, LABEL_RADIUS, LABEL_RADIUS + clear);
+  function makeLabel(at, ply, color, width, back) {
+    // Clear of the arrow's own edge, outline included.
+    const clear = width / 2 + (settings.border ? settings.borderWidth : 0);
+    const point = labelPoint(at, back, LABEL_RADIUS + clear);
     if (!point) return null;
     const group = document.createElementNS(SVG_NS, 'g');
     group.setAttribute(LABEL, '');
-    // Solid, where the arrows are half faded. A translucent numeral takes on
+    // Solid, where the arrows are faded. A translucent numeral takes on
     // whatever it happens to be over — a lichess arrow crossing underneath,
     // a piece, a dark square — and stops being readable.
     group.setAttribute('opacity', '1');
@@ -283,7 +272,7 @@
     }
     if (settings.border && settings.borderWidth > 0) {
       disc.setAttribute('stroke', settings.borderColor);
-      disc.setAttribute('stroke-width', String(lineWidth(settings.borderWidth)));
+      disc.setAttribute('stroke-width', String(settings.borderWidth));
     }
     const text = document.createElementNS(SVG_NS, 'text');
     for (const [k, v] of Object.entries({
@@ -297,6 +286,29 @@
     group.appendChild(text);
     return group;
   }
+
+  /**
+   * A numeral beside one of lichess's own arrows: the line's first move,
+   * which is the arrow lichess draws, and any later move of the line that
+   * another line happens to start with. The geometry is read off the arrow
+   * itself rather than worked out, since lichess drew it and not us, and the
+   * clearance is a full-width arrow's, not a halved one's.
+   */
+  function labelOnArrow(group, ply, color, back) {
+    const line = group && ownLines(group)[0];
+    if (!line) return null;
+    const at = {};
+    for (const a of ['x1', 'y1', 'x2', 'y2']) {
+      at[a] = parseFloat(line.getAttribute(a));
+      if (!Number.isFinite(at[a])) return null;
+    }
+    const width = drawnWidth(line) || parseStrokeWidth(line.getAttribute('stroke-width')) || DEFAULTS.width;
+    const cut = splitAtHead(at.x1, at.y1, at.x2, at.y2, width);
+    return makeLabel((cut && cut.shaft) || at, ply, color, width, back);
+  }
+
+  /** Which of lichess's arrows is the move `key`, or -1 if none of them is. */
+  const hostArrow = (parsed, key) => parsed.findIndex(p => p && p.dest && p.orig + p.dest === key);
 
   /**
    * A copy of a real lichess arrow, moved onto `at` and painted. Copied
@@ -331,79 +343,112 @@
     // A darker shade of the best move's own colour: still plainly the best
     // line, still plainly not the move lichess is pointing at.
     const color = darker(colors[bestIdx]);
-    const drawn = parsed.filter(p => p && p.dest).map(p => p.orig + p.dest);
-    const moves = continuationMoves(bestLineMoves(), settings.lineDepth, drawn)
-      .map(m => ({ ...m, at: arrowEndpoints(m.orig, m.dest, ref.cal) }))
+    const bestKey = parsed[bestIdx].orig + parsed[bestIdx].dest;
+    const onBoard = parsed.filter(p => p && p.dest).map(p => p.orig + p.dest);
+    // Every move of the line, whether or not it needs an arrow of its own:
+    // all of them are numbered, and `host` says which arrow already on the
+    // board a move that does not need one belongs to.
+    const moves = continuationMoves(bestLineMoves(bestKey), settings.lineDepth, onBoard)
+      .map(m => ({ ...m, at: arrowEndpoints(m.orig, m.dest, ref.cal), host: m.drawn ? hostArrow(parsed, m.key) : -1 }))
       .filter(m => m.at);
+    const mine = moves.filter(m => !m.drawn);
 
     const stamp = [
-      color, settings.opacity, settings.lineDepth, settings.uniformWidth, settings.width,
+      colors[bestIdx], settings.opacity, settings.lineDepth, settings.lineOpacity, settings.uniformWidth, settings.width,
       settings.border, settings.borderColor, settings.borderWidth,
-      ref.cal.flipped, ref.cal.margin, moves.map(m => m.key).join(' '),
+      ref.cal.flipped, ref.cal.margin,
+      bestKey, moves.map(m => m.key + (m.drawn ? '=' : '')).join(' '),
     ].join(':');
     // The labels ride along in the ordering with a length of nothing, which
     // leaves them on top of every arrow.
     const withLabels = (arrows, labels) => ({
       groups: arrows.concat(labels),
-      parsed: moves.concat(labels.map(() => ({ label: true }))),
+      parsed: mine.concat(labels.map(() => ({ label: true }))),
     });
     const existing = Array.from(parent.querySelectorAll(`:scope > g[${EXTRA}]`));
-    if (svg.getAttribute(LINE_STAMP) === stamp && existing.length === moves.length) {
+    if (svg.getAttribute(LINE_STAMP) === stamp && existing.length === mine.length) {
       return withLabels(existing, Array.from(parent.querySelectorAll(`:scope > g[${LABEL}]`)));
     }
 
     clearExtras(svg);
     svg.setAttribute(LINE_STAMP, stamp);
-    // Lichess's own width for the best line, before we touched it.
-    const refWidth = parseStrokeWidth(origAttr(ref.line, 'stroke-width') ?? ref.line.getAttribute('stroke-width'));
-    const width = arrowStrokeWidth(refWidth, settings.uniformWidth, settings.width);
-    const marker = ensureMarker(svg, boardIdx, color, stripedHead(boardIdx));
-    // Half a regular arrow, outline and all: where the head ends, how long a
-    // stripe runs and how big the arrowhead comes out all follow from it.
-    const stripeWidth = lineWidth(width || parseStrokeWidth(ref.line.getAttribute('stroke-width')) || DEFAULTS.width);
-    const borderWidth = lineWidth(settings.borderWidth) || 0;
-    const labels = [];
-    const made = moves.map(m => {
+    // As wide as any other arrow, outline and all: where the head ends, how
+    // long a stripe runs and how big the arrowhead comes out all follow from
+    // it. The stripes and the darker shade are what mark these as ours, so
+    // there is nothing for a thinner line to say that they do not.
+    const width = drawnWidth(ref.line) || parseStrokeWidth(ref.line.getAttribute('stroke-width')) || DEFAULTS.width;
+    // The same filled head lichess's own arrows get. The shaft's stripes run
+    // the whole length of the arrow and say plainly enough that the extension
+    // drew it; a head only three stroke widths long cannot carry a stripe and
+    // still read as an arrowhead, since a single gap, leaning, takes a bite
+    // out of it corner to corner.
+    const marker = ensureMarker(svg, boardIdx, color);
+    const made = mine.map(m => {
       const g = document.createElementNS(SVG_NS, 'g');
       g.setAttribute(EXTRA, '');
       // Faded by the group, as with lichess's arrows, so the outline does not
       // show through the shaft.
-      g.setAttribute('opacity', String(lineOpacity(settings.opacity)));
+      g.setAttribute('opacity', String(settings.opacity * settings.lineOpacity));
 
       // Striped, so an arrow the extension drew is never mistaken for one
       // lichess drew. The arrow is split where the arrowhead's back edge
       // falls: the shaft takes the stripes and the shear, the other piece
-      // takes the head. Both are cut square at the ends, so the shear leaves
-      // a clean diagonal and no cap rounds out past the head. The outlines
-      // are cloned off the two, stripes, shear and all.
-      const cut = splitAtHead(m.at.x1, m.at.y1, m.at.x2, m.at.y2, stripeWidth);
+      // takes the head, which is left solid. Both are cut square at the ends,
+      // so the shear leaves a clean diagonal and no cap rounds out past the
+      // head. The outlines are cloned off the two, stripes, shear and all.
+      const cut = splitAtHead(m.at.x1, m.at.y1, m.at.x2, m.at.y2, width);
       const lines = [];
       if (cut && cut.shaft) {
-        const shaft = newLine(ref.line, cut.shaft, color, stripeWidth);
+        const shaft = newLine(ref.line, cut.shaft, color, width);
         shaft.removeAttribute('marker-end');
         shaft.setAttribute('stroke-linecap', 'butt');
-        const stripes = stripePattern(stripeWidth, lengthOf(cut.shaft));
+        const stripes = stripePattern(width, lengthOf(cut.shaft));
         if (stripes) shaft.setAttribute('stroke-dasharray', stripes.join(' '));
         const skew = stripeTransform(cut.shaft.x1, cut.shaft.y1, cut.shaft.x2, cut.shaft.y2, STRIPE_ANGLE);
         if (skew) shaft.setAttribute('transform', skew);
         lines.push([shaft, false]);
       }
-      const head = newLine(ref.line, cut ? cut.head : m.at, color, stripeWidth);
+      const head = newLine(ref.line, cut ? cut.head : m.at, color, width);
       head.setAttribute('stroke-linecap', 'butt');
       head.setAttribute('marker-end', `url(#${marker})`);
       lines.push([head, true]);
 
       lines.forEach(([line]) => g.appendChild(line));
       parent.appendChild(g);
-      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead, borderWidth, true));
-      // Clear of the arrow's own edge, outline included.
-      const label = makeLabel((cut && cut.shaft) || m.at, m.ply, color, stripeWidth / 2 + borderWidth);
+      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead));
+      return g;
+    });
+
+    // Now number the line, every move of it and in order. A move already on
+    // the board is numbered beside the arrow that is there, so the numbers
+    // run 1, 2, 3 whether or not we had to draw the arrow ourselves.
+    //
+    // A lone 1 on a board with nothing after it says nothing, so the move
+    // lichess draws is numbered only once the line carries on past it.
+    const carried = new Map();
+    const labels = [];
+    // Two numerals on one arrow — a line that plays a move twice — step back
+    // along the shaft rather than landing on each other.
+    const stepBack = key => {
+      const n = carried.get(key) || 0;
+      carried.set(key, n + 1);
+      return LABEL_RADIUS + n * LABEL_STEP;
+    };
+    const first = { ply: 0, key: bestKey, host: bestIdx };
+    for (const m of moves.length ? [first, ...moves] : []) {
+      const back = stepBack(m.key);
+      // The line's own colour throughout: bright for the move to play, darker
+      // for what follows. A numeral riding on another line's arrow keeps the
+      // darker shade rather than taking that arrow's, which would read as a
+      // remark on how good the move is instead of where it falls in the line.
+      const label = m.host >= 0
+        ? labelOnArrow(groups[m.host], m.ply, m.ply ? color : colors[bestIdx], back)
+        : makeLabel(shaftOf(m.at, width), m.ply, color, width, back);
       if (label) {
         parent.appendChild(label);
         labels.push(label);
       }
-      return g;
-    });
+    }
     return withLabels(made, labels);
   }
 

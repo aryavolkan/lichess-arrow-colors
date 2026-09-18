@@ -69,17 +69,28 @@ Lichess draws one arrow per engine line, for its first move only. This draws
 the moves after it as well, in a darker shade of the same green, so you can
 see where the best line is going and not just how it starts.
 
-Each one carries its place in the line: lichess's own arrow is move 1, so the
-one after it is 2, then 3, and so on. The number is a small disc set beside
-the arrow, just behind its head and always on the same side of the way it
-points. Beside rather than on it keeps the arrow itself clear, and behind the
-head rather than on the destination square keeps two moves arriving at the
-same square from different directions from stacking their numbers on top of
-each other.
+Every move of the line is numbered, lichess's own arrow included: it is move
+1, the one after it 2, then 3, and so on. Numbering the first move as well is
+what makes the rest read as a line rather than as a set of extras starting at
+2, and its numeral is drawn in its own brighter colour, so the number says
+which move it belongs to as plainly as the arrow does. It appears only once
+there is a move after it to number; on a board where the line is not drawn
+past its first move, a lone 1 would say nothing.
 
-The arrows are drawn at half the width and half the opacity of a regular one,
-outline and arrowhead included, which keeps the move you actually have to play
-the strongest thing on the board. The numbers themselves are drawn solid, and
+The number is a small disc set beside the arrow, just behind its head and
+always on the same side of the way it points. Beside rather than on it keeps
+the arrow itself clear, and behind the head rather than on the destination
+square keeps two moves arriving at the same square from different directions
+from stacking their numbers on top of each other.
+
+The arrows are as wide as any other, outline and arrowhead included, and drawn
+at four fifths of a regular arrow's opacity, which keeps the move you actually
+have to play the strongest thing on the board without making the rest of the
+line something you have to look for. The stripes and the darker shade already
+say whose arrows these are, so there is nothing a thinner line would add.
+
+How strongly they are drawn has its own slider on the options page, from a
+tenth of a regular arrow up to the full strength of one. The numbers themselves are drawn solid, and
 over every arrow on the board, since a number you cannot read is not worth
 drawing: a faded one takes on whatever it happens to lie over, and one buried
 under a crossing arrow is not there at all.
@@ -89,18 +100,31 @@ it. Four moves past the first are drawn by default, numbered 2 to 5; the
 slider on the options page goes up to eight, and zero turns the whole thing
 off.
 
+Point at any line in the engine panel and the board follows it. Lichess
+already clears the other arrows and draws the line you are pointing at on its
+own; the moves after it are drawn and numbered the same way, so you can read
+a line off the panel and see it on the board without playing it out. The line
+keeps its own colour while you do, so a losing line is still red as you walk
+through it. Move the pointer away and the board goes back to all five.
+
 These arrows are finely striped, since they are the one thing on the board
 lichess did not put there: a solid arrow is always a move an engine line
 starts with, and a striped one is always a move further down the best line.
 The stripes are cut on the diagonal, which reads as deliberate at a glance
-where a square cut looks like an arrow that failed to draw. The arrowhead is
-striped on the same rhythm, and stays square to the arrow so the direction
-still reads.
+where a square cut looks like an arrow that failed to draw. Only the shaft is
+striped. The head is three stroke widths long, and a single gap leaning across
+it takes a bite out of it corner to corner, which leaves a chevron rather than
+an arrowhead; the shaft's stripes run the whole length of the arrow and say
+plainly enough whose arrow it is.
 
-A move whose arrow is already on the board is skipped. So a line that shuffles
-a piece back and forth keeps only its first, brightest arrow, and a
+A move whose arrow is already on the board is not drawn twice. So a line that
+shuffles a piece back and forth keeps only its first, brightest arrow, and a
 continuation that happens to also be another line's first move is left in that
-line's own colour rather than being drawn over.
+line's own colour rather than being drawn over. It still carries its number,
+though, beside the arrow that is there: the numbers run 1, 2, 3 without a hole
+in them whether or not the extension had to draw the arrow itself, and a move
+the line plays twice is numbered twice, the second numeral sitting a disc
+further back along the shaft.
 
 ## Overlapping arrows
 
@@ -135,8 +159,15 @@ Colours and opacity can be changed from the extension's options page
 - When a row's evaluation is not shown (lichess hides it with a single engine
   line), the arrow's line width is used instead, since lichess derives that
   width from the same quantity.
+- Lichess draws the line under the pointer as the *best* arrow, clearing the
+  others, so which line to follow is readable off the board itself: the row
+  whose first move carries the best brush. The extension watches for that
+  rather than for the pointer, which means no hover state to keep in sync, no
+  listener to tear down, and the right behaviour whenever something else makes
+  lichess single a line out. It falls back to the first row when no row owns
+  the arrow.
 - Lichess gives every move of a line its own `.pv-san` element carrying
-  `fen|uci` for the board it previews on hover, so the whole best line is
+  `fen|uci` for the board it previews on hover, so the whole line is
   readable from the engine panel. The moves past the first are arrows the
   extension creates: lichess never draws them.
 - Placing a new arrow needs the board's geometry, which the extension measures
@@ -149,17 +180,18 @@ Colours and opacity can be changed from the extension's options page
   the added arrows go whenever it redraws the board. They are put back by the
   same pass that recolours everything else, which the `MutationObserver` runs
   on that very redraw.
-- The arrowhead is a `marker`, so its stripes are drawn in marker units,
-  where one unit is the line's stroke width. That is the same measure the
-  shaft's stripes are sized in, so a fixed 1.5 units to a stripe and its gap
-  keeps the two in step at any width. The stripes run past the head on both
-  sides and are clipped to its outline.
-- A striped head means its outline marker is drawn unfilled: the outline is
-  wanted, but a filled black head underneath would show through the stripes'
-  gaps instead of the board.
+- The arrowhead is a `marker`, whose geometry is in units of the line's stroke
+  width: a triangle three long and four across. Striping it was tried and does
+  not survive that size. The stripes have to lean the way the shaft's do, and a
+  gap leaning 25 degrees travels almost two units across a head four units
+  tall, so whichever way the bands are placed one of them slices the head from
+  the back corner to the tip and it stops reading as an arrowhead. The head is
+  drawn solid instead, which is also why its outline marker is filled: with no
+  gaps to show through, the black head underneath is exactly the outline that
+  is wanted.
 - The numerals are drawn as their own groups rather than inside the arrows',
-  because opacity on a group applies to everything in it and the added arrows
-  are deliberately half faded. In the longest-first ordering they count as
+  because opacity on a group applies to everything in it and both the added
+  arrows and lichess's own are deliberately faded. In the longest-first ordering they count as
   shorter than a circle, so they sort after every shape on the board and
   nothing can be painted over them.
 - The colour is the best move's own, taken down in lightness: an `hsl()` from
@@ -175,7 +207,7 @@ Colours and opacity can be changed from the extension's options page
 - Each arrow is cut in two where the arrowhead's back edge falls, which
   chessground puts `refX` stroke widths back from the line's end. The shaft
   takes the stripes and the shear; the piece the head covers carries the
-  marker. Both are cut square at the ends, since a round cap on the head's
+  marker, and stays solid. Both are cut square at the ends, since a round cap on the head's
   piece bulges out past the arrowhead's outline as a pair of dark ears.
 - Dashes always cut square across a line, so the diagonal comes from shearing
   the shaft along its own direction, sliding each point sideways in proportion

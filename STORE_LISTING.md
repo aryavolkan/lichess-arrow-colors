@@ -45,20 +45,28 @@ Other things it does:
 
 - Draws the rest of the engine's best line, which lichess leaves off the board
   entirely: lichess draws only the first move of each line. The extra moves are
-  drawn in a darker shade of the same green and finely striped on the diagonal,
-  so you can always tell them from the arrows lichess itself draws, and each is
-  numbered with its place in the line. They are drawn at half the width and
-  half the opacity of a regular arrow, so the move you actually have to play
-  stays the strongest thing on the board. Four moves deep by default,
-  adjustable up to eight, or off.
+  drawn at the same width and outlined the same way as lichess's own, in a
+  darker shade of the same green and with the shaft finely striped on the
+  diagonal, so you can always tell them apart from the arrows lichess itself
+  draws. Every move of the line is numbered with its place in it, the move
+  lichess draws being 1, and a move that is already on the board is numbered
+  where it stands rather than drawn over. They are drawn at four fifths of a
+  regular arrow's opacity, so the move you actually have to play stays the
+  strongest thing on the board; that is adjustable, from a tenth of a regular
+  arrow up to the full strength of one. Four moves deep by default, adjustable
+  up to eight, or off.
+- Follows the line you point at. Hover any line in the engine panel and its
+  moves are the ones drawn and numbered on the board, in that line's own
+  colour, so you can read a line off the panel and see it played out without
+  clicking through it.
 - Draws every arrow at the same width. Lichess thins the weaker ones, but the
   colour already says that, so the widths only added noise.
 - Outlines the arrows so they stay readable over pieces and over light and dark
   squares.
 
 Everything is adjustable on the options page: the colours, the outline, the
-arrow width, the opacity, how much of the best line is drawn, and whether the
-scale stretches per position. There is also a second mode that colours arrows
+arrow width, the opacity, how much of the best line is drawn and how strongly,
+and whether the scale stretches per position. There is also a second mode that colours arrows
 by their rank in the engine list instead, with a fixed palette you can edit.
 
 Turn the extension off and lichess's own arrows come back exactly as they were.

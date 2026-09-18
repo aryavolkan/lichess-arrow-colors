@@ -22,17 +22,16 @@
   // spread over differences that do not matter.
   const MIN_SPAN = 0.05;
 
-  // An added arrow is drawn at this fraction of a regular arrow's opacity,
-  // and this fraction of its width. The outline goes with the width, or it
-  // would be nearly as thick as the arrow it outlines.
-  const LINE_OPACITY = 0.5;
-  const LINE_WIDTH = 0.5;
-
   // The numeral each added arrow carries, as a disc beside the shaft behind
   // the arrowhead. Radius and type size are in board units, where a square
   // is 1.
   const LABEL_RADIUS = 0.13;
   const LABEL_FONT = 0.19;
+
+  // How far back along the shaft the next numeral sits when a move is drawn
+  // once but numbered twice, as a line that repeats a move is. A diameter and
+  // a little, so the two read as two discs rather than one blob.
+  const LABEL_STEP = 2.4 * LABEL_RADIUS;
 
   // Half a square: chessground's board units put the centre of the board at
   // (0, 0), so a1's centre is 3.5 squares out along both axes.
@@ -48,6 +47,12 @@
     // How many moves of the best line to draw past the one lichess draws
     // itself, which numbers them 2 to 5. 0 leaves the board as lichess has it.
     lineDepth: 4,
+    // What an added arrow's opacity is, as a fraction of a regular arrow's.
+    // Width is not scaled with it: an added arrow is as wide as any other, and
+    // its stripes and its darker shade already say that the extension drew it.
+    // Below 1 it keeps the move you actually have to play the strongest thing
+    // on the board; at 1 the whole line is drawn as solidly as lichess's own.
+    lineOpacity: 0.8,
     // Outline drawn under each arrow. borderWidth is per side, in board units
     // where one square is 1 (chessground's own stroke-width unit).
     // Give every engine arrow the same width. Colour already says how good a
@@ -273,17 +278,38 @@
   }
 
   /**
-   * The moves of the best line that lichess does not draw, from its second
-   * move on: `raw` is the line's moves in order, as plain UCI or lichess's
-   * own "fen|uci" data-board values, starting with the move lichess already
-   * has an arrow for.
+   * Which engine line the board is pointing at: the row whose first move
+   * lichess is drawing as the best arrow.
    *
-   * A move whose arrow is on the board already is skipped, so a line that
-   * shuffles a piece back and forth keeps only its first, least faded arrow,
-   * and a continuation that happens to be another line's first move is left
-   * in that line's own colour. A move we cannot read ends the line rather
-   * than being stepped over, since everything after it would be drawn at the
-   * wrong depth.
+   * Pointing at a line in the engine panel makes lichess clear every other
+   * arrow and draw that line's first move, and only it, with the best brush.
+   * So the arrow on the board already says which line to follow, and reading
+   * it beats watching for the pointer: there is no hover state to keep, it
+   * rights itself when the pointer leaves, and it goes on working whatever
+   * else makes lichess single a line out.
+   *
+   * Falls back to the best line when no row owns the arrow, which covers a
+   * board with no engine arrow yet and a row whose move cannot be read.
+   */
+  function lineForArrow(keys, key) {
+    const i = key === undefined || key === null ? -1 : (keys || []).indexOf(key);
+    return i < 0 ? 0 : i;
+  }
+
+  /**
+   * The best line past the move lichess draws itself, from its second move
+   * on: `raw` is the line's moves in order, as plain UCI or lichess's own
+   * "fen|uci" data-board values, starting with the move lichess already has
+   * an arrow for.
+   *
+   * A move whose arrow is on the board already comes back marked `drawn`
+   * rather than being dropped: either another line starts with that move, or
+   * the line plays it twice. It is still the line's nth move and still has to
+   * carry that number, so that the numbers run 1, 2, 3 without a hole in
+   * them; all it does not want is a second arrow laid over the one there.
+   *
+   * A move we cannot read ends the line rather than being stepped over, since
+   * everything after it would be numbered at the wrong depth.
    */
   function continuationMoves(raw, depth, taken) {
     const out = [];
@@ -292,9 +318,9 @@
     for (let ply = 1; ply < raw.length && ply <= depth; ply++) {
       const key = pvKeys([raw[ply]])[0];
       if (!key) break;
-      if (seen.has(key)) continue;
+      const drawn = seen.has(key);
       seen.add(key);
-      out.push({ orig: key.slice(0, 2), dest: key.slice(2, 4), key, ply });
+      out.push({ orig: key.slice(0, 2), dest: key.slice(2, 4), key, ply, drawn });
     }
     return out;
   }
@@ -376,9 +402,9 @@
   // not so dark that it stops reading as the same green.
   const DARKEN = 0.6;
 
-  // How far the stripes lean off square, in degrees. A shear this size cuts
-  // plainly on the diagonal while still crossing the shaft rather than
-  // running away down it.
+  // How far the shaft's stripes lean off square, in degrees. A shear this
+  // size cuts plainly on the diagonal while still crossing the shaft rather
+  // than running away down it.
   const STRIPE_ANGLE = 25;
 
 
@@ -427,30 +453,6 @@
     return `matrix(${[a, b, cc, d, e, f].join(' ')})`;
   }
 
-  // The arrowhead is striped on the same rhythm the shaft works out at, which
-  // is 1.5 stroke widths to a stripe and its gap. Marker geometry is already
-  // in stroke widths, so these are constants rather than a calculation.
-  const HEAD_STRIPE_ON = 1;
-  const HEAD_STRIPE_GAP = 0.5;
-
-  /**
-   * The stripes across an arrowhead, as parallelograms in marker units.
-   * They lean the way the shaft's stripes do and run past the head on both
-   * sides, to be clipped to its outline when drawn. The first gap falls at
-   * the head's back edge, carrying on from the shaft's last stripe.
-   */
-  function headStripes(angle) {
-    const k = Math.tan((angle * Math.PI) / 180);
-    const back = -0.5, front = 4.5;   // the head itself spans 0 to 4 across
-    const at = (p, y) => ({ x: p + (y - CG_HEAD.refY) * k, y });
-    const bands = [];
-    for (let x = HEAD_STRIPE_GAP; x < CG_HEAD.tipX; x += HEAD_STRIPE_ON + HEAD_STRIPE_GAP) {
-      const end = Math.min(x + HEAD_STRIPE_ON, CG_HEAD.tipX);
-      bands.push([at(x, back), at(end, back), at(end, front), at(x, front)]);
-    }
-    return bands;
-  }
-
   /**
    * Split an arrow where the arrowhead's back edge falls: the shaft, which
    * carries the stripes, and the piece the head covers, which carries the
@@ -497,16 +499,6 @@
     return color;
   }
 
-  /** Added arrows sit at half the opacity a regular arrow is drawn at. */
-  function lineOpacity(base) {
-    return base * LINE_OPACITY;
-  }
-
-  /** ...and half its width, outline and arrowhead included. */
-  function lineWidth(base) {
-    return base > 0 ? base * LINE_WIDTH : null;
-  }
-
   /**
    * Where an added arrow's numeral goes: `back` along the shaft from the
    * arrowhead and `side` off to one side of it, so it sits next to the arrow
@@ -537,9 +529,9 @@
     parseCgHash, pvKeys, rankArrows, colorForRank, arrowLength, drawOrder,
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
     parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
-    continuationMoves, squarePoint, calibrate, arrowEndpoints, lineOpacity, lineWidth, labelPoint,
-    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE,
-    DEFAULTS, MAX_SHIFT, MIN_SPAN, LINE_OPACITY, LINE_WIDTH, LABEL_RADIUS, LABEL_FONT, BEST_BRUSH, ALT_BRUSH,
+    continuationMoves, lineForArrow, squarePoint, calibrate, arrowEndpoints, labelPoint,
+    stripePattern, stripeTransform, splitAtHead, darker, STRIPE_ANGLE,
+    DEFAULTS, MAX_SHIFT, MIN_SPAN, LABEL_RADIUS, LABEL_STEP, LABEL_FONT, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LAC = api;

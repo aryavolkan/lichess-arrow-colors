@@ -363,21 +363,21 @@ test('drawOrder puts circles and unreadable shapes on top of every arrow', () =>
 });
 
 // ---- the rest of the best line -----------------------------------------
-const { continuationMoves, squarePoint, calibrate, arrowEndpoints, lineOpacity, labelPoint,
-  LABEL_RADIUS, LABEL_FONT } = require('../src/logic.js');
+const { continuationMoves, lineForArrow, squarePoint, calibrate, arrowEndpoints, labelPoint,
+  LABEL_RADIUS, LABEL_STEP, LABEL_FONT } = require('../src/logic.js');
 
 test('continuationMoves returns the line after the move lichess already draws', () => {
   const line = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5'];
   assert.deepEqual(continuationMoves(line, 3, []), [
-    { orig: 'e7', dest: 'e5', key: 'e7e5', ply: 1 },
-    { orig: 'g1', dest: 'f3', key: 'g1f3', ply: 2 },
-    { orig: 'b8', dest: 'c6', key: 'b8c6', ply: 3 },
+    { orig: 'e7', dest: 'e5', key: 'e7e5', ply: 1, drawn: false },
+    { orig: 'g1', dest: 'f3', key: 'g1f3', ply: 2, drawn: false },
+    { orig: 'b8', dest: 'c6', key: 'b8c6', ply: 3, drawn: false },
   ]);
 });
 
 test('continuationMoves reads lichess\'s fen|uci form and promotions', () => {
   const line = ['8/4P3/8|e2e4', 'rn/pp|e7e8q'];
-  assert.deepEqual(continuationMoves(line, 2, []), [{ orig: 'e7', dest: 'e8', key: 'e7e8', ply: 1 }]);
+  assert.deepEqual(continuationMoves(line, 2, []), [{ orig: 'e7', dest: 'e8', key: 'e7e8', ply: 1, drawn: false }]);
 });
 
 test('continuationMoves draws nothing at depth 0, and nothing for a one-move line', () => {
@@ -387,23 +387,50 @@ test('continuationMoves draws nothing at depth 0, and nothing for a one-move lin
   assert.deepEqual(continuationMoves(null, 3, []), []);
 });
 
-test('continuationMoves skips moves already drawn on the board', () => {
+test('continuationMoves marks a move already on the board instead of dropping it', () => {
   const line = ['e2e4', 'g8f6', 'b1c3', 'd7d5'];
-  // g8f6 is an alternative line's own arrow, so lichess draws it already.
+  // g8f6 is an alternative line's own arrow, so lichess draws it already. It
+  // is still the line's second move and still has to carry that number; all
+  // it does not want is a second arrow laid over the one already there.
   assert.deepEqual(continuationMoves(line, 3, ['e2e4', 'g8f6']), [
-    { orig: 'b1', dest: 'c3', key: 'b1c3', ply: 2 },
-    { orig: 'd7', dest: 'd5', key: 'd7d5', ply: 3 },
+    { orig: 'g8', dest: 'f6', key: 'g8f6', ply: 1, drawn: true },
+    { orig: 'b1', dest: 'c3', key: 'b1c3', ply: 2, drawn: false },
+    { orig: 'd7', dest: 'd5', key: 'd7d5', ply: 3, drawn: false },
   ]);
 });
 
-test('continuationMoves keeps the shallower arrow when a piece shuffles back', () => {
+test('continuationMoves keeps one arrow when a piece shuffles back, and numbers both plies', () => {
   const line = ['e2e4', 'b8c6', 'g1f3', 'c6b8', 'b8c6'];
-  assert.deepEqual(continuationMoves(line, 4, []).map(m => m.key), ['b8c6', 'g1f3', 'c6b8']);
+  assert.deepEqual(continuationMoves(line, 4, []).map(m => [m.key, m.drawn]), [
+    ['b8c6', false], ['g1f3', false], ['c6b8', false], ['b8c6', true],
+  ]);
+});
+
+test('lineForArrow follows the line whose first move the board is pointing at', () => {
+  // Hovering a line in the engine panel makes lichess draw that line's first
+  // move, and only it, with the best brush. The arrow is what says which line
+  // to follow, so the panel row it belongs to is the line to draw.
+  const keys = ['d7d5', 'f8c5', 'd8e7', 'f6e4'];
+  assert.equal(lineForArrow(keys, 'd7d5'), 0);
+  assert.equal(lineForArrow(keys, 'd8e7'), 2);
+  assert.equal(lineForArrow(keys, 'f6e4'), 3);
+});
+
+test('lineForArrow falls back to the best line when no row owns the arrow', () => {
+  assert.equal(lineForArrow(['d7d5', 'f8c5'], 'a2a3'), 0);
+  // A row whose move cannot be read leaves a hole, which must not match.
+  assert.equal(lineForArrow(['d7d5', undefined, 'd8e7'], undefined), 0);
+  assert.equal(lineForArrow([], 'd7d5'), 0);
+  assert.equal(lineForArrow(null, 'd7d5'), 0);
 });
 
 test('continuationMoves stops at a move it cannot read, rather than skipping it', () => {
   const line = ['e2e4', 'e7e5', 'P@d4', 'g1f3'];
   assert.deepEqual(continuationMoves(line, 4, []).map(m => m.key), ['e7e5']);
+});
+
+test('LABEL_STEP sets two numerals on one arrow a clear disc apart', () => {
+  assert.ok(LABEL_STEP > 2 * LABEL_RADIUS);
 });
 
 test('squarePoint maps squares onto chessground\'s board units', () => {
@@ -451,10 +478,10 @@ test('arrowEndpoints survives an arrow shorter than the margin', () => {
   assert.equal(arrowEndpoints('e2', 'e4', null), null);
 });
 
-test('lineOpacity draws an added arrow at half a regular one', () => {
-  assert.equal(lineOpacity(0.65), 0.325);
-  assert.equal(lineOpacity(1), 0.5);
-  assert.equal(lineOpacity(DEFAULTS.opacity), DEFAULTS.opacity / 2);
+test('an added arrow is as wide as a regular one, and a little less solid', () => {
+  assert.equal(DEFAULTS.lineOpacity, 0.8);
+  assert.ok(DEFAULTS.lineOpacity < 1, 'the move to play stays the strongest arrow');
+  assert.ok(DEFAULTS.opacity * DEFAULTS.lineOpacity > 0.4, 'but is still plainly there');
 });
 
 test('labelPoint sits beside the shaft, just behind the arrowhead', () => {
@@ -641,42 +668,4 @@ test('stripePattern puts several stripes on a one-square shaft', () => {
   assert.ok(n >= 3, `only ${n} stripes on a one-square arrow`);
 });
 
-const { lineWidth, LINE_WIDTH } = require('../src/logic.js');
 
-test('lineWidth draws an added arrow at half a regular one', () => {
-  assert.equal(lineWidth(0.15), 0.075);
-  assert.equal(lineWidth(DEFAULTS.width), DEFAULTS.width / 2);
-  assert.equal(LINE_WIDTH, 0.5);
-});
-
-test('lineWidth has no width to halve without one', () => {
-  assert.equal(lineWidth(0), null);
-  assert.equal(lineWidth(null), null);
-});
-
-const { headStripes } = require('../src/logic.js');
-
-test('headStripes stripe the arrowhead on the same lean as the shaft', () => {
-  const k = Math.tan((STRIPE_ANGLE * Math.PI) / 180);
-  const bands = headStripes(STRIPE_ANGLE);
-  assert.ok(bands.length >= 2, 'more than one stripe across the head');
-  for (const b of bands) {
-    assert.equal(b.length, 4, 'a parallelogram');
-    // Each cut leans: the far corner sits further along the arrow than the
-    // near one, in proportion to how far across the head it is.
-    assert.ok(Math.abs(b[3].x - b[0].x - (b[3].y - b[0].y) * k) < 1e-9);
-    assert.ok(b[1].x > b[0].x, 'and has width along the arrow');
-  }
-});
-
-test('headStripes start clear of the head\'s back edge and reach its point', () => {
-  const bands = headStripes(0);
-  assert.ok(bands[0][0].x > 0, 'a gap first, carrying on from the shaft');
-  assert.equal(bands[bands.length - 1][1].x, CG_HEAD.tipX);
-});
-
-test('headStripes run past the head on both sides, for it to be clipped to', () => {
-  for (const b of headStripes(STRIPE_ANGLE)) {
-    assert.ok(b[0].y < 0 && b[3].y > 4, 'clears the head, which spans 0 to 4');
-  }
-});

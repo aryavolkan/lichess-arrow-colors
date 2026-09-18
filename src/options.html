@@ -9,7 +9,7 @@
     label { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
     label span { flex: 1; }
     input[type=color] { width: 44px; height: 28px; padding: 0; border: 1px solid #aaa; }
-    #opacityValue, #borderWidthValue, #widthValue, #lineDepthValue { width: 3em; text-align: right; }
+    #opacityValue, #borderWidthValue, #widthValue, #lineDepthValue, #lineOpacityValue { width: 3em; text-align: right; }
     button { margin-top: 12px; }
     .note { color: #666; font-size: 12px; margin-top: 12px; }
     select { flex: 1; }
@@ -40,11 +40,15 @@
   </div>
   <label><span>Draw more of the best line</span><input type="range" id="lineDepth" min="0" max="8" step="1"><output id="lineDepthValue"></output></label>
   <p class="note">Lichess draws only the first move of each line. This draws the moves after it too, in the same green, fading as the line goes on. Slide to zero to turn it off.</p>
+  <div id="lineOpts">
+    <label><span>Strength of those arrows</span><input type="range" id="lineOpacity" min="0.1" max="1" step="0.05"><output id="lineOpacityValue"></output></label>
+    <p class="note">How solidly the added arrows are drawn, against a regular one. Below full keeps the move you actually have to play the strongest thing on the board.</p>
+  </div>
   <label><span>Opacity</span><input type="range" id="opacity" min="0.1" max="1" step="0.05"><output id="opacityValue"></output></label>
   <label><span>Same width for all arrows</span><input type="checkbox" id="uniformWidth"></label>
   <p class="note">Lichess draws weaker moves thinner. Colour already shows that, so all arrows are drawn the same size.</p>
   <div id="widthOpts">
-    <label><span>Arrow width</span><input type="range" id="width" min="0.0625" max="0.234375" step="0.015625"><output id="widthValue"></output></label>
+    <label><span>Arrow width</span><input type="range" id="width" min="0.03125" max="0.28125" step="0.015625"><output id="widthValue"></output></label>
   </div>
   <label><span>Outline arrows</span><input type="checkbox" id="border"></label>
   <div id="borderOpts">
