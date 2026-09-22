@@ -5,11 +5,16 @@
   const { parseCgHash, pvKeys, rankArrows, colorForRank, parseEvalText, scoreArrows, colorForShift, spanOf, drawOrder,
     parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth,
     continuationMoves, lineForArrow, calibrate, arrowEndpoints, labelPoint, LABEL_RADIUS, LABEL_STEP, LABEL_FONT,
-    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, CG_HEAD, BEST_BRUSH, DEFAULTS } = globalThis.LAC;
+    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, CG_HEAD, BEST_BRUSH, ALT_BRUSH, shortcutFor,
+    DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
   let scheduled = false;
+  // The engine line a digit key has put on the board on its own: which row of
+  // the panel, and the position it was picked in, so it lets go by itself
+  // when the position moves on.
+  let picked = null;
 
   // ---- reading lichess state -------------------------------------------
 
@@ -43,11 +48,12 @@
    * own best line most of the time and the line under the pointer while the
    * engine panel is being read. Rows are mapped one at a time rather than
    * through readPvKeys, which drops the ones it cannot read and would shift
-   * every row after the hole.
+   * every row after the hole. A line picked with a digit key names its row
+   * outright in `rowIdx`, since its first move need not be on the board.
    */
-  function bestLineMoves(key) {
+  function bestLineMoves(key, rowIdx = -1) {
     const rows = pvRows();
-    const row = rows[lineForArrow(rows.map(r => pvKeys([rowMove(r)])[0]), key)];
+    const row = rows[rowIdx >= 0 ? rowIdx : lineForArrow(rows.map(r => pvKeys([rowMove(r)])[0]), key)];
     if (!row) return [];
     const sans = Array.from(row.querySelectorAll('.pv-san')).map(el => el.getAttribute('data-board') || '');
     if (sans.length) return sans;
@@ -55,10 +61,12 @@
     return first ? [first] : [];
   }
 
+  /** The position the engine panel is analysing, as lichess writes it on the panel. */
+  const panelFen = () => document.querySelector('.pv_box')?.getAttribute('data-fen') || '';
+
   /** Side to move, from the FEN on the engine panel. Defaults to white. */
   function turnColor() {
-    const fen = document.querySelector('.pv_box')?.getAttribute('data-fen') || '';
-    return fen.split(' ')[1] === 'b' ? 'black' : 'white';
+    return panelFen().split(' ')[1] === 'b' ? 'black' : 'white';
   }
 
   function boardSvgs() {
@@ -233,6 +241,7 @@
     group.removeAttribute('data-lac');
     clearBorders(group);
     restoreGroupOpacity(group);
+    group.removeAttribute('visibility');
     group.querySelectorAll('line[data-lac-orig]').forEach(line => {
       const orig = JSON.parse(line.getAttribute('data-lac-orig'));
       ORIG_ATTRS.forEach((a, i) => (orig[i] == null ? line.removeAttribute(a) : line.setAttribute(a, orig[i])));
@@ -372,35 +381,84 @@
   }
 
   /**
+   * The line the board follows. Left alone, that is the line lichess draws
+   * with the best brush: its own best line, or the one under the pointer. A
+   * digit key picks a row of the panel instead, whose first move may or may
+   * not have an arrow on the board -- lichess draws no arrow for a line much
+   * worse than the best -- so `idx` is -1 when the extension has to draw it.
+   *
+   * `colors` is read for the arrow's own colour when it is on the board; a
+   * missing arrow's colour is worked out by the caller, which scores it as one
+   * more alternative arrow so it lands where the panel's numbers put it.
+   */
+  function focusFor(parsed, colors) {
+    if (picked) {
+      const rows = pvRows();
+      const key = rows[picked.index] ? pvKeys([rowMove(rows[picked.index])])[0] : null;
+      if (!key) return null;
+      const idx = hostArrow(parsed, key);
+      return { key, idx, row: picked.index, picked: true, color: idx >= 0 ? colors[idx] : colors[parsed.length] };
+    }
+    const idx = parsed.findIndex((p, i) => p && p.dest && p.brush === BEST_BRUSH && colors[i]);
+    if (idx < 0) return null;
+    return { key: parsed[idx].orig + parsed[idx].dest, idx, row: -1, picked: false, color: colors[idx] };
+  }
+
+  /** The arrow a picked line's first move would be, for scoring when lichess has not drawn it. */
+  function pickedArrow(parsed) {
+    if (!picked) return null;
+    const row = pvRows()[picked.index];
+    const key = row ? pvKeys([rowMove(row)])[0] : null;
+    if (!key || hostArrow(parsed, key) >= 0) return null;
+    return { orig: key.slice(0, 2), dest: key.slice(2, 4), brush: ALT_BRUSH, lineWidth: null };
+  }
+
+  /**
    * Draw the continuation arrows, and return them so they take part in the
    * longest-first ordering with lichess's own. Rebuilt only when something
    * about them has actually changed: the observer sees every arrow we add,
    * and rebuilding on each pass would never settle.
+   *
+   * With a line picked from the keyboard, the line's first move is drawn here
+   * too when lichess has no arrow for it: solid and at full strength, as the
+   * arrow lichess would have drawn, since it is the move to play and not a
+   * move further down the line.
    */
-  function syncExtras(svg, boardIdx, groups, parsed, colors) {
+  function syncExtras(svg, boardIdx, groups, parsed, colors, focus) {
     const none = { groups: [], parsed: [] };
     const parent = groups.length ? groups[0].parentNode : null;
-    const bestIdx = parsed.findIndex((p, i) => p && p.dest && p.brush === BEST_BRUSH && colors[i]);
-    const ref = parent && settings.lineDepth > 0 && bestIdx >= 0 ? calibrateFrom(groups, parsed, bestIdx) : null;
+    const wanted = focus && (settings.lineDepth > 0 || focus.picked);
+    const ref = parent && wanted && focus.color ? calibrateFrom(groups, parsed, focus.idx) : null;
     if (!ref) {
       clearExtras(svg);
       return none;
     }
     // A darker shade of the best move's own colour: still plainly the best
     // line, still plainly not the move lichess is pointing at.
-    const color = darker(colors[bestIdx]);
-    const bestKey = parsed[bestIdx].orig + parsed[bestIdx].dest;
-    const onBoard = parsed.filter(p => p && p.dest).map(p => p.orig + p.dest);
+    const color = darker(focus.color);
+    const bestKey = focus.key;
+    // A picked line has every other arrow hidden, so only its own first move
+    // counts as already on the board -- and it does whether lichess drew it or
+    // this pass is about to, so a line that plays the move again later does
+    // not lay a second arrow over it.
+    const onBoard = focus.picked ? [bestKey] : parsed.filter(p => p && p.dest).map(p => p.orig + p.dest);
     // Every move of the line, whether or not it needs an arrow of its own:
     // all of them are numbered, and `host` says which arrow already on the
     // board a move that does not need one belongs to.
-    const moves = continuationMoves(bestLineMoves(bestKey), settings.lineDepth, onBoard)
-      .map(m => ({ ...m, at: arrowEndpoints(m.orig, m.dest, ref.cal), host: m.drawn ? hostArrow(parsed, m.key) : -1 }))
+    const place = m => ({ ...m, at: arrowEndpoints(m.orig, m.dest, ref.cal), host: m.drawn ? hostArrow(parsed, m.key) : -1 });
+    const moves = continuationMoves(bestLineMoves(bestKey, focus.row), settings.lineDepth, onBoard)
+      .map(place)
       .filter(m => m.at);
-    const mine = moves.filter(m => !m.drawn);
+    // The line's first move, lichess's own arrow when there is one.
+    const first = place({ orig: bestKey.slice(0, 2), dest: bestKey.slice(2, 4), key: bestKey, ply: 0, drawn: focus.idx >= 0 });
+    if (!first.drawn && !first.at) {
+      clearExtras(svg);
+      return none;
+    }
+    const mine = [first, ...moves].filter(m => !m.drawn);
 
     const stamp = [
-      colors[bestIdx], settings.opacity, settings.lineDepth, settings.lineOpacity, settings.uniformWidth, settings.width,
+      focus.color, focus.picked ? 'p' : '', focus.idx, settings.opacity, settings.lineDepth, settings.lineOpacity, settings.uniformWidth, settings.width,
       settings.border, settings.borderColor, settings.borderWidth,
       ref.cal.flipped, ref.cal.margin,
       bestKey, moves.map(m => m.key + (m.drawn ? '=' : '')).join(' '),
@@ -427,6 +485,20 @@
     const made = mine.map(m => {
       const g = document.createElementNS(SVG_NS, 'g');
       g.setAttribute(EXTRA, '');
+      parent.appendChild(g);
+
+      // The first move of a picked line, which lichess drew no arrow for:
+      // the arrow it would have drawn, solid, in the line's own bright colour
+      // and at a regular arrow's strength, since it is the move to play.
+      if (m.ply === 0) {
+        g.setAttribute('opacity', String(settings.opacity));
+        const line = newLine(ref.line, m.at, focus.color, width);
+        line.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, focus.color)})`);
+        g.appendChild(line);
+        if (settings.border) addBorder(svg, boardIdx, g, line);
+        return g;
+      }
+
       // Faded by the group, as with lichess's arrows, so the outline does not
       // show through the shaft.
       g.setAttribute('opacity', String(settings.opacity * settings.lineOpacity));
@@ -456,7 +528,6 @@
       lines.push([head, true]);
 
       lines.forEach(([line]) => g.appendChild(line));
-      parent.appendChild(g);
       if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead, true));
       return g;
     });
@@ -476,7 +547,6 @@
       carried.set(key, n + 1);
       return LABEL_RADIUS + n * LABEL_STEP;
     };
-    const first = { ply: 0, key: bestKey, host: bestIdx };
     for (const m of moves.length ? [first, ...moves] : []) {
       const back = stepBack(m.key);
       // The line's own colour throughout: bright for the move to play, darker
@@ -484,8 +554,8 @@
       // darker shade rather than taking that arrow's, which would read as a
       // remark on how good the move is instead of where it falls in the line.
       const label = m.host >= 0
-        ? labelOnArrow(groups[m.host], m.ply, m.ply ? color : colors[bestIdx], back)
-        : makeLabel(shaftOf(m.at, width), m.ply, color, width, back);
+        ? labelOnArrow(groups[m.host], m.ply, m.ply ? color : focus.color, back)
+        : makeLabel(shaftOf(m.at, width), m.ply, m.ply ? color : focus.color, width, back);
       if (label) {
         parent.appendChild(label);
         labels.push(label);
@@ -521,13 +591,55 @@
     sorted.forEach(g => parent.appendChild(g));
   }
 
+  // ---- a line picked from the keyboard ----------------------------------
+
+  const PICKED = 'data-lac-picked';
+
+  /**
+   * Whether the picked line still stands: the position it was picked in is
+   * still the one on the panel, and its row still shows a line. Otherwise it
+   * is let go, which is how playing the move, or stepping through the game,
+   * puts the board back to all its arrows.
+   */
+  function checkPicked() {
+    if (!picked) return;
+    const row = pvRows()[picked.index];
+    if (!settings.enabled || !settings.shortcuts || picked.fen !== panelFen() || !row || !rowMove(row)) picked = null;
+  }
+
+  /** Mark the picked row in the panel; src/content.css styles it as lichess styles the row under the pointer. */
+  function markRows() {
+    pvRows().forEach((row, i) => {
+      if (picked && i === picked.index) row.setAttribute(PICKED, '');
+      else row.removeAttribute(PICKED);
+    });
+  }
+
+  /**
+   * Take an engine arrow off the board, or put it back. Pointing at a line
+   * has lichess draw that line alone; picking one from the keyboard hides the
+   * others instead, since lichess only listens to the pointer. chessground
+   * never sets this attribute, so removing it is the whole restore.
+   */
+  function setHidden(group, hidden) {
+    if (hidden) group.setAttribute('visibility', 'hidden');
+    else group.removeAttribute('visibility');
+  }
+
   function apply() {
+    checkPicked();
+    markRows();
     boardSvgs().forEach((svg, boardIdx) => {
       const groups = Array.from(svg.querySelectorAll(':scope > g > g[cgHash]'));
       const parsed = groups.map(g => parseCgHash(g.getAttribute('cgHash')));
-      const colors = settings.enabled ? colorsFor(parsed) : groups.map(() => null);
+      // A picked move lichess drew no arrow for is scored as one more arrow,
+      // after the real ones, so its colour is the one the panel's numbers
+      // give it; colors[parsed.length] is then that colour and nothing else.
+      const ghost = settings.enabled ? pickedArrow(parsed) : null;
+      const colors = settings.enabled ? colorsFor(ghost ? parsed.concat([ghost]) : parsed) : groups.map(() => null);
+      const focus = settings.enabled ? focusFor(parsed, colors) : null;
       if (settings.enabled) {
-        const extra = syncExtras(svg, boardIdx, groups, parsed, colors);
+        const extra = syncExtras(svg, boardIdx, groups, parsed, colors, focus);
         const all = groups.concat(extra.groups);
         if (all.length > 1) reorder(all, parsed.concat(extra.parsed));
       } else {
@@ -539,11 +651,14 @@
           if (g.hasAttribute('data-lac')) restore(g);
           return;
         }
-        const stamp = [color, settings.opacity, settings.uniformWidth, settings.width, settings.border, settings.borderColor, settings.borderWidth].join(':');
+        // With a line picked, every other engine arrow leaves the board.
+        const hidden = !!(focus && focus.picked && i !== focus.idx);
+        const stamp = [color, hidden, settings.opacity, settings.uniformWidth, settings.width, settings.border, settings.borderColor, settings.borderWidth].join(':');
         if (g.getAttribute('data-lac') === stamp) return;
         g.setAttribute('data-lac', stamp);
         clearBorders(g);
         setGroupOpacity(g);
+        setHidden(g, hidden);
         const marker = ensureMarker(svg, boardIdx, color);
         ownLines(g).forEach(line => {
           paint(line, color, marker);
@@ -562,6 +677,64 @@
     });
   }
 
+  // ---- keyboard --------------------------------------------------------
+
+  const typing = el => !!el && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName || ''));
+
+  function pick(index) {
+    picked = index === null ? null : { index, fen: panelFen() };
+    schedule();
+  }
+
+  /**
+   * Play the picked line's first move. The row is given the pointerdown a
+   * click on it would raise, and lichess's own handler for that plays the
+   * move, exactly as clicking the line does; the position moves on and the
+   * pick lets go with it.
+   */
+  function playPicked() {
+    const row = pvRows()[picked.index];
+    pick(null);
+    if (!row) return;
+    row.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0,
+    }));
+  }
+
+  /**
+   * Digits pick a line, Space plays it, Escape lets it go. Heard on the way
+   * down, before lichess's own shortcuts, so that Space reaches lichess only
+   * while no line is picked and goes on playing the best move then. Keys
+   * typed into a field, or with a modifier held, are not touched.
+   */
+  function onKeyDown(e) {
+    if (!settings.enabled || !settings.shortcuts) return;
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.isComposing || e.repeat) return;
+    if (typing(document.activeElement)) return;
+    checkPicked();
+    const rows = pvRows();
+    // The digit row by its physical key, so a layout that puts the digits
+    // behind Shift still has them; the numeric keypad by what it types, since
+    // with Num Lock off its keys are Home, End and the arrows.
+    const digit = /^Digit([1-9])$/.exec(e.code || '');
+    const action = shortcutFor(digit ? digit[1] : e.key, rows.length, picked ? picked.index : null);
+    if (!action) return;
+    // A row with no line in it yet is nothing to pick.
+    if (action.type === 'pick' && !rowMove(rows[action.index])) return;
+    if (!action.passive) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+    if (action.type === 'pick') pick(action.index);
+    else if (action.type === 'play') playPicked();
+    else pick(null);
+  }
+
+  /** The pointer wins: moving it onto the panel hands the board back to lichess's own hover. */
+  function onMouseOver(e) {
+    if (picked && e.target instanceof Element && e.target.closest('.pv_box .pv')) pick(null);
+  }
+
   // ---- wiring ----------------------------------------------------------
 
   function loadSettings(cb) {
@@ -574,6 +747,8 @@
   }
 
   loadSettings(() => {
+    window.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('mouseover', onMouseOver, true);
     apply();
     new MutationObserver(schedule).observe(document.documentElement, {
       childList: true,

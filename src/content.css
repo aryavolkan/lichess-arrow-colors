@@ -1,0 +1,6 @@
+/* The engine line picked with a digit key, marked as lichess marks the row
+   under the pointer, with a bar at the edge to tell the two apart. */
+.pv_box .pv[data-lac-picked] {
+  background: color-mix(in oklab, var(--c-secondary, #3893e8) 20%, var(--c-bg, transparent));
+  box-shadow: inset 3px 0 0 var(--c-secondary, #3893e8);
+}

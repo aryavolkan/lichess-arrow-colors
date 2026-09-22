@@ -125,6 +125,27 @@ in them whether or not the extension had to draw the arrow itself, and a move
 the line plays twice is numbered twice, the second numeral sitting a disc
 further back along the shaft.
 
+## Keyboard shortcuts
+
+Pointing at a line needs the mouse. The keys **1** to **5** do the same thing
+from the keyboard: press the number of an engine line and the board shows that
+line on its own, exactly as it does under the pointer, first move solid and
+the moves after it striped and numbered, in the line's own colour. The row is
+marked in the panel. Press the same number again, or **Escape**, to let it go,
+and the board goes back to all its arrows.
+
+**Space** plays the picked line's first move, through the same code lichess
+runs when a line is clicked, so the move lands in the game exactly as a click
+would put it. With no line picked, Space is left to lichess, where it plays
+the best move as it always has. A line lichess draws no arrow for, because it
+is much worse than the best, gets its arrow drawn when picked, so any line the
+panel lists can be seen and played.
+
+Moving the pointer onto the panel hands the board back to lichess's own hover,
+and stepping to another position lets the pick go. Keys typed into a field, or
+pressed with a modifier held, are not touched. The shortcuts can be turned off
+on the options page.
+
 ## Overlapping arrows
 
 Arrows are drawn longest first, so where two cross, the shorter one lies on
@@ -167,6 +188,14 @@ The extension collects no data. See [PRIVACY.md](PRIVACY.md).
   listener to tear down, and the right behaviour whenever something else makes
   lichess single a line out. It falls back to the first row when no row owns
   the arrow.
+- A line picked with a digit key is not put through lichess's hover. Lichess
+  rechecks which row the pointer is really over after every redraw, several
+  times a second while the engine runs, and a faked `mouseover` would be
+  undone each time and the board would flicker. The extension instead hides
+  the other engine arrows itself, draws the picked move when lichess has no
+  arrow for it, and numbers the line as it does for the best line. Space plays
+  the move by giving the row the `pointerdown` a click would raise, which is
+  the event lichess's own click handler listens for.
 - Lichess gives every move of a line its own `.pv-san` element carrying
   `fen|uci` for the board it previews on hover, so the whole line is
   readable from the engine panel. The moves past the first are arrows the

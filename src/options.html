@@ -55,6 +55,8 @@
     <label><span>Outline colour</span><input type="color" id="borderColor"></label>
     <label><span>Outline thickness</span><input type="range" id="borderWidth" min="0.01" max="0.08" step="0.005"><output id="borderWidthValue"></output></label>
   </div>
+  <label><span>Keyboard shortcuts</span><input type="checkbox" id="shortcuts"></label>
+  <p class="note">Keys 1 to 5 put that engine line on the board on its own, as pointing at it does. Space plays the picked line's first move; the same key again, or Escape, lets it go.</p>
   <button id="reset">Reset to defaults</button>
   <p class="note">Changes apply immediately on open lichess tabs. Threat-mode and hand-drawn arrows are left untouched.</p>
   <script src="logic.js"></script>

@@ -22,6 +22,7 @@
   const lineOpts = document.getElementById('lineOpts');
   const lineOpacity = document.getElementById('lineOpacity');
   const lineOpacityValue = document.getElementById('lineOpacityValue');
+  const shortcuts = document.getElementById('shortcuts');
 
   const depthLabel = n => (n > 0 ? String(n) : 'off');
   const percent = n => Math.round(n * 100) + '%';
@@ -61,6 +62,7 @@
     evalHelp.hidden = s.mode !== 'eval';
     opacity.value = s.opacity;
     opacityValue.value = Number(s.opacity).toFixed(2);
+    shortcuts.checked = s.shortcuts;
     colorInputs.forEach(input => (input.value = s.colors[Number(input.dataset.rank)] || DEFAULTS.colors[Number(input.dataset.rank)]));
   }
 
@@ -77,6 +79,7 @@
       borderColor: borderColor.value,
       borderWidth: Number(borderWidth.value),
       opacity: Number(opacity.value),
+      shortcuts: shortcuts.checked,
       colors: colorInputs.map(i => i.value),
     };
     opacityValue.value = s.opacity.toFixed(2);
@@ -94,7 +97,7 @@
   }
 
   chrome.storage.sync.get(DEFAULTS, stored => render({ ...DEFAULTS, ...stored }));
-  [enabled, mode, normalize, lineDepth, lineOpacity, opacity, uniformWidth, width, border, borderColor, borderWidth, ...colorInputs].forEach(el => el.addEventListener('input', save));
+  [enabled, mode, normalize, lineDepth, lineOpacity, opacity, uniformWidth, width, border, borderColor, borderWidth, shortcuts, ...colorInputs].forEach(el => el.addEventListener('input', save));
   document.getElementById('reset').addEventListener('click', () => {
     chrome.storage.sync.set({ ...DEFAULTS, colors: [...DEFAULTS.colors] });
     render(DEFAULTS);

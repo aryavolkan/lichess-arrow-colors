@@ -712,3 +712,28 @@ test('headStripes cover the head at every height, not only across its middle', (
     }
   }
 });
+
+test('shortcutFor: digits pick a line, the same digit again lets it go', () => {
+  const { shortcutFor } = require('../src/logic.js');
+  assert.deepEqual(shortcutFor('1', 5, null), { type: 'pick', index: 0 });
+  assert.deepEqual(shortcutFor('5', 5, null), { type: 'pick', index: 4 });
+  assert.deepEqual(shortcutFor('2', 5, 0), { type: 'pick', index: 1 });
+  assert.deepEqual(shortcutFor('3', 5, 2), { type: 'clear' });
+});
+
+test('shortcutFor: a digit past the last line is left to lichess', () => {
+  const { shortcutFor } = require('../src/logic.js');
+  assert.equal(shortcutFor('4', 3, null), null);
+  assert.equal(shortcutFor('1', 0, null), null);
+  assert.equal(shortcutFor('0', 5, null), null);
+});
+
+test('shortcutFor: Space plays only while a line is picked, Escape clears without taking the key', () => {
+  const { shortcutFor } = require('../src/logic.js');
+  assert.equal(shortcutFor(' ', 5, null), null);
+  assert.deepEqual(shortcutFor(' ', 5, 1), { type: 'play' });
+  assert.equal(shortcutFor('Escape', 5, null), null);
+  assert.deepEqual(shortcutFor('Escape', 5, 1), { type: 'clear', passive: true });
+  assert.equal(shortcutFor('a', 5, 1), null);
+  assert.equal(shortcutFor(undefined, 5, 1), null);
+});

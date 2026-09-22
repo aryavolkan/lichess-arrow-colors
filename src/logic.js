@@ -66,6 +66,9 @@
     // Rank 1 (best) → rank 5 and beyond (rank mode only).
     colors: ['#22c55e', '#eab308', '#f97316', '#ef4444', '#9ca3af'],
     opacity: 0.65,
+    // Keys 1 to 9 put an engine line on the board on its own, as pointing at
+    // it does; Space plays the line's first move while one is picked.
+    shortcuts: true,
   });
 
   /**
@@ -558,6 +561,31 @@
     };
   }
 
+  /**
+   * What a key press asks of the engine panel, or null to leave the key to
+   * lichess. `rows` is how many lines the panel shows and `picked` the index
+   * of the one a digit has put on the board, or null.
+   *
+   *   1..9   pick that line; the same digit again lets it go
+   *   Space  play the picked line's first move (lichess's own Space plays the
+   *          best move, so it is only taken while a line is picked)
+   *   Escape let the picked line go, without taking the key from lichess
+   *
+   * A digit past the last line is left alone, so it keeps whatever lichess
+   * does with it.
+   */
+  function shortcutFor(key, rows, picked) {
+    const has = picked !== null && picked !== undefined && picked >= 0;
+    if (/^[1-9]$/.test(key || '')) {
+      const index = Number(key) - 1;
+      if (index >= (rows || 0)) return null;
+      return has && picked === index ? { type: 'clear' } : { type: 'pick', index };
+    }
+    if (key === ' ') return has ? { type: 'play' } : null;
+    if (key === 'Escape') return has ? { type: 'clear', passive: true } : null;
+    return null;
+  }
+
   function colorForRank(rank, palette) {
     if (rank < 0 || !palette || !palette.length) return null;
     return palette[Math.min(rank, palette.length - 1)];
@@ -568,7 +596,7 @@
     parseEvalText, winningChances, povChances, scoreArrows, colorForShift, shiftFromLineWidth, spanOf,
     parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
     continuationMoves, lineForArrow, squarePoint, calibrate, arrowEndpoints, labelPoint,
-    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE,
+    stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, shortcutFor,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, LABEL_RADIUS, LABEL_STEP, LABEL_FONT, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
