@@ -142,6 +142,8 @@ crossing; a one-square arrow buried under it does not.
 Colours and opacity can be changed from the extension's options page
 (right-click the extension icon, then **Options**). Changes apply live.
 
+The extension collects no data. See [PRIVACY.md](PRIVACY.md).
+
 ## How it works
 
 - Lichess's board library (chessground) tags every arrow group with a

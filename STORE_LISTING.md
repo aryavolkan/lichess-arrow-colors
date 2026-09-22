@@ -96,9 +96,23 @@ collect or use user data" and the three certification boxes.
 
 ## Privacy policy
 
-Not required, since no data is collected. If the form insists, the repository
-README and this file serve as the statement: no data is collected, stored off
-device, or shared.
+Required. The Web Store rejected 1.5.0 (violation "Purple Nickel", User Data
+Privacy) because the privacy policy field pointed at the repository, and
+Google does not accept an owner site, README, or repo front page as a policy.
+The link has to open a page that is a privacy policy and nothing else.
+
+Paste exactly this URL into the **Privacy policy** field on the Privacy tab
+of the developer dashboard:
+
+```
+https://github.com/aryavolkan/lichess-arrow-colors/blob/main/PRIVACY.md
+```
+
+It leads straight to `PRIVACY.md`, a standalone policy stating that the
+extension collects nothing, stores only its settings via `chrome.storage.sync`,
+and makes no network requests. Keep the "I do not collect or use user data"
+answer and the three certification boxes as they are; the policy backs them
+up rather than contradicting them.
 
 ## Screenshots
 
