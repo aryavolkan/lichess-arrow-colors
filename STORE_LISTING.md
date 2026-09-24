@@ -1,7 +1,7 @@
 # Chrome Web Store listing
 
 Everything the submission form asks for. The package to upload is
-`dist/lichess-arrow-colors-1.5.0.zip`, also attached to the GitHub release.
+`dist/lichess-arrow-colors-1.9.0.zip`, also attached to the GitHub release.
 
 ## Name
 
@@ -59,6 +59,10 @@ Other things it does:
   moves are the ones drawn and numbered on the board, in that line's own
   colour, so you can read a line off the panel and see it played out without
   clicking through it.
+- Keyboard shortcuts. The keys 1 to 5 put that engine line on the board on
+  its own, just as pointing at it does, and Space plays the picked line's
+  first move exactly as a click on the line would. Press the same number
+  again, or Escape, to let it go. They can be turned off on the options page.
 - Draws every arrow at the same width. Lichess thins the weaker ones, but the
   colour already says that, so the widths only added noise.
 - Outlines the arrows so they stay readable over pieces and over light and dark
@@ -66,8 +70,9 @@ Other things it does:
 
 Everything is adjustable on the options page: the colours, the outline, the
 arrow width, the opacity, how much of the best line is drawn and how strongly,
-and whether the scale stretches per position. There is also a second mode that colours arrows
-by their rank in the engine list instead, with a fixed palette you can edit.
+whether the keyboard shortcuts are on, and whether the scale stretches per
+position. There is also a second mode that colours arrows by their rank in the
+engine list instead, with a fixed palette you can edit.
 
 Turn the extension off and lichess's own arrows come back exactly as they were.
 
