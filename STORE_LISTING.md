@@ -63,32 +63,52 @@ Other things it does:
   its own, just as pointing at it does, and Space plays the picked line's
   first move exactly as a click on the line would. Press the same number
   again, or Escape, to let it go. They can be turned off on the options page.
+- Keeps the depth up while the engine catches up. Lichess starts every
+  position's search again from depth 1, even after you play a move from one of
+  the engine's own lines. That line was already searched, so the extension
+  shows the depth it was searched to, one less for each move into it, until
+  the new search gets there. Keep playing the engine's moves and the depth
+  goes down by one a move instead of back to zero. The carried depth is
+  underlined, and hovering it shows both depths.
+- Draws the move that was played. Where the game branches, at a mistake in a
+  game with computer analysis or where you have tried another move yourself,
+  lichess marks the move actually played with a faint white arrow under the
+  pieces, and a one-square move all but disappears under the piece making it.
+  Where the engine prefers another move, the extension draws the played move
+  solid instead: white for White's move and black for Black's, outlined in the
+  other colour so it shows on any square.
+- Draws every arrow behind the pieces, still over the squares, so an arrow no
+  longer covers the piece it starts from or any piece it crosses. The numbers
+  on the best line stay on top, where they can be read.
 - Draws every arrow at the same width. Lichess thins the weaker ones, but the
   colour already says that, so the widths only added noise.
 - Outlines the arrows so they stay readable over pieces and over light and dark
   squares.
 
 Everything is adjustable on the options page: the colours, the outline, the
-arrow width, the opacity, how much of the best line is drawn and how strongly,
-whether the keyboard shortcuts are on, and whether the scale stretches per
-position. There is also a second mode that colours arrows by their rank in the
-engine list instead, with a fixed palette you can edit.
+arrow width, the opacity, and how much of the best line is drawn and how
+strongly. The keyboard shortcuts, the kept depth, the played move, arrows
+behind the pieces and the stretched scale can each be switched off there. There
+is also a second mode that colours arrows by their rank in the engine list
+instead, with a fixed palette you can edit.
 
-Turn the extension off and lichess's own arrows come back exactly as they were.
+Turn the extension off and lichess's own arrows and depth readout come back
+exactly as they were.
 
 This is not an official lichess product. It does not give you engine help in
-games. It only restyles arrows that lichess already draws for you on the
-analysis board.
+games. It only changes how the analysis board shows the engine analysis that
+lichess already runs for you there.
 
 ## Permission justifications
 
-**storage** — Saves your settings: the colours, arrow width, outline and
-opacity. Nothing else is stored, and the settings never leave your browser
-except through Chrome's own settings sync.
+**storage** — Saves your settings: the colours, arrow width, outline, opacity
+and which features are on. Nothing else is stored, and the settings never leave
+your browser except through Chrome's own settings sync.
 
-**Host permission, https://lichess.org/** — The extension has to read the
-engine arrows lichess has drawn on the page and restyle them. It only runs on
-lichess.org and does not touch any other site.
+**Host permission, https://lichess.org/** — The extension has to read what
+lichess shows on the analysis page (the engine arrows, the engine's lines and
+depth, and the move list) and restyle it. It only runs on lichess.org and does
+not touch any other site.
 
 ## Are you using remote code?
 
