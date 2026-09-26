@@ -4,3 +4,12 @@
   background: color-mix(in oklab, var(--c-secondary, #3893e8) 20%, var(--c-bg, transparent));
   box-shadow: inset 3px 0 0 var(--c-secondary, #3893e8);
 }
+
+/* The engine's depth readout while it shows a depth carried over from the
+   line that led here rather than this position's own. The dotted underline
+   says there is more to read on hover, where the title says both depths. */
+.ceval .engine .info[data-lac-carried] {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}

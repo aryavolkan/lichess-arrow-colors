@@ -6,7 +6,7 @@
     parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth,
     continuationMoves, lineForArrow, calibrate, arrowEndpoints, labelPoint, LABEL_RADIUS, LABEL_STEP, LABEL_FONT,
     stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, CG_HEAD, BEST_BRUSH, ALT_BRUSH, shortcutFor,
-    playedMove, playedStyle, DEFAULTS } = globalThis.LAC;
+    playedMove, playedStyle, depthIn, withDepth, lineDepths, rememberDepths, carriedDepth, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -39,6 +39,9 @@
       .filter(pv => pv.key);
   }
 
+  /** Every move of a row's line, as lichess writes it: "board|uci", with the board after the move. */
+  const lineOf = row => Array.from(row.querySelectorAll('.pv-san')).map(el => el.getAttribute('data-board') || '');
+
   /**
    * Every move of the line lichess is pointing at, in order, as it writes
    * them: the panel gives each move of a PV its own .pv-san carrying
@@ -55,7 +58,7 @@
     const rows = pvRows();
     const row = rows[rowIdx >= 0 ? rowIdx : lineForArrow(rows.map(r => pvKeys([rowMove(r)])[0]), key)];
     if (!row) return [];
-    const sans = Array.from(row.querySelectorAll('.pv-san')).map(el => el.getAttribute('data-board') || '');
+    const sans = lineOf(row);
     if (sans.length) return sans;
     const first = rowMove(row);
     return first ? [first] : [];
@@ -774,7 +777,127 @@
     });
   }
 
+  // ---- the depth readout ------------------------------------------------
+
+  // Lichess starts every position's search again from depth 1, even one the
+  // engine was just looking down a line through, and Stockfish's hash only
+  // brings the depth back a little faster than from nothing. So the readout
+  // keeps showing how deep the line was searched, one less for each move
+  // into it, until the new search is as deep.
+  //
+  // `depths` holds, for each position a line has gone through, the deepest
+  // it was looked at that way. `depthSample` is a readout lichess has shown,
+  // kept for its wording, to write a depth into while lichess shows
+  // "Calculating moves" instead. `written` holds, for a text node our readout
+  // is showing in, what lichess had put there and what we put in its place.
+  const depths = new Map();
+  let depthSample = '';
+  const written = new WeakMap();
+  const CARRIED = 'data-lac-carried';
+  // Put, unseen, at the end of our readout: a word joiner, which has no
+  // width. When lichess's search reaches the carried depth it writes the very
+  // words ours says, and without it the two could not be told apart, so ours
+  // would look to be still standing over a search that has caught up.
+  const OURS = '\u2060';
+
+  /** What lichess last wrote in a text node, whether or not ours is showing in it. */
+  function lichessText(node) {
+    const w = written.get(node);
+    return w && node.data === w.shown ? w.orig : node.data;
+  }
+
+  /**
+   * Put `text` in the readout, or give lichess's back. Lichess only rewrites
+   * the node when its own text changes, so its text is kept to put back when
+   * ours goes; otherwise ours would stay until the depth next moved.
+   */
+  function writeDepth(info, node, text, title) {
+    const orig = node ? lichessText(node) : null;
+    const shown = node && text && text !== orig ? text + OURS : null;
+    if (shown) {
+      written.set(node, { orig, shown });
+      if (node.data !== shown) node.data = shown;
+    } else if (node && written.has(node)) {
+      written.delete(node);
+      if (node.data !== orig) node.data = orig;
+    }
+    if (!info) return;
+    if (shown) {
+      info.setAttribute(CARRIED, '');
+      if (info.getAttribute('title') !== title) info.setAttribute('title', title);
+    } else if (info.hasAttribute(CARRIED)) {
+      info.removeAttribute(CARRIED);
+      info.removeAttribute('title');
+    }
+  }
+
+  /**
+   * File how deep the engine has looked along the lines on the panel, and
+   * show the depth carried into this position while it is deeper than the
+   * one lichess shows. The readout is the first text in the engine box's
+   * info, after the "go deeper" button when there is one.
+   *
+   * Threat mode is a search of another position and is left alone, and so
+   * is a cloud eval, which lichess labels as such next to its depth.
+   */
+  function syncDepth() {
+    const box = document.querySelector('.ceval');
+    watchCeval(box);
+    const info = box && box.querySelector('.engine .info');
+    const node = info ? Array.from(info.childNodes).find(n => n.nodeType === Node.TEXT_NODE) : null;
+    const fen = panelFen();
+    let text = null;
+    let title = '';
+    if (settings.enabled && settings.keepDepth && node && fen && !box.querySelector('.show-threat.active')) {
+      const own = lichessText(node);
+      // Rows carry their first move only when they show an eval of this
+      // position, and the readout says a depth only then too. Without one it
+      // says something else -- loading the engine, how many MiB of it -- whose
+      // numbers are not a depth.
+      const rows = pvRows().filter(row => row.getAttribute('data-uci'));
+      const live = rows.length ? depthIn(own) : 0;
+      if (live > 0) {
+        depthSample = own;
+        rememberDepths(depths, lineDepths(fen, rows.map(lineOf), live));
+      }
+      const carried = info.querySelector('.cloud') ? null : carriedDepth(depths, fen, live);
+      if (carried) {
+        if (live > 0) text = withDepth(own, carried);
+        else if (!/\d/.test(own) && box.classList.contains('computing')) text = withDepth(depthSample, carried);
+        title = `Carried over: the engine searched the line that led here to depth ${carried}. ` +
+          (live > 0 ? `This position's own search is at depth ${live}.` : "This position's own search has only just started.");
+      }
+    }
+    writeDepth(info, node, text, title);
+  }
+
+  let cevalObserver = null;
+  let watchedCeval = null;
+
+  /**
+   * The readout changes as text, which the page-wide observer does not
+   * watch: text changes all over the site, every clock tick among them. The
+   * engine box is watched on its own for them, and only the readout is redone
+   * when it changes. Our own write is taken off the queue, as the page-wide
+   * observer does with its own.
+   */
+  function watchCeval(box) {
+    if (box === watchedCeval) return;
+    if (cevalObserver) cevalObserver.disconnect();
+    watchedCeval = box;
+    if (!box) return;
+    cevalObserver = cevalObserver || new MutationObserver(() => {
+      try {
+        syncDepth();
+      } finally {
+        cevalObserver.takeRecords();
+      }
+    });
+    cevalObserver.observe(box, { childList: true, subtree: true, characterData: true });
+  }
+
   function apply() {
+    syncDepth();
     checkPicked();
     markRows();
     const played = settings.enabled && settings.playedMove ? readPlayed() : null;

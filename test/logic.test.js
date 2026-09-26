@@ -804,3 +804,93 @@ test('DEFAULTS show the played move', () => {
 test('DEFAULTS draw the arrows behind the pieces', () => {
   assert.equal(DEFAULTS.underPieces, true);
 });
+
+test('depthIn reads the depth from lichess\'s readout, in any wording', () => {
+  const { depthIn } = require('../src/logic.js');
+  assert.equal(depthIn('Depth 23'), 23);
+  assert.equal(depthIn('Profondeur 7'), 7);
+  assert.equal(depthIn('Depth 23/99'), 23);
+  assert.equal(depthIn('Calculating moves…'), 0);
+  assert.equal(depthIn(''), 0);
+  assert.equal(depthIn(null), 0);
+});
+
+test('withDepth writes another depth into a readout lichess has shown', () => {
+  const { withDepth } = require('../src/logic.js');
+  assert.equal(withDepth('Depth 30', 29), 'Depth 29');
+  assert.equal(withDepth('Profondeur 8', 12), 'Profondeur 12');
+  assert.equal(withDepth('Calculating moves…', 29), null);
+  assert.equal(withDepth('', 29), null);
+  assert.equal(withDepth(undefined, 29), null);
+});
+
+// 1. e4 e5 2. Nf3 from the start, as the engine panel writes a line.
+const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR';
+const E5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR';
+const NF3 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R';
+const LINE = [`${E4}|e2e4`, `${E5}|e7e5`, `${NF3}|g1f3`];
+
+test('lineDepths: each move into a line has been looked at one less deep', () => {
+  const { lineDepths } = require('../src/logic.js');
+  assert.deepEqual(lineDepths(START, [LINE], 20), [[`${E4} b`, 19], [`${E5} w`, 18], [`${NF3} b`, 17]]);
+});
+
+test('lineDepths files every line of a multi-line search at the depth shown', () => {
+  const { lineDepths } = require('../src/logic.js');
+  const D4 = 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR';
+  assert.deepEqual(lineDepths(START, [[LINE[0]], [`${D4}|d2d4`]], 20), [[`${E4} b`, 19], [`${D4} b`, 19]]);
+});
+
+test('lineDepths starts from whoever is to move', () => {
+  const { lineDepths, positionKey } = require('../src/logic.js');
+  const black = `${E4} b KQkq - 0 1`;
+  assert.deepEqual(lineDepths(black, [[`${E5}|e7e5`]], 20), [[`${E5} w`, 19]]);
+  assert.equal(positionKey(black), `${E4} b`);
+});
+
+test('lineDepths stops where the depth runs out, and skips a move it cannot read', () => {
+  const { lineDepths } = require('../src/logic.js');
+  assert.deepEqual(lineDepths(START, [LINE], 3), [[`${E4} b`, 2], [`${E5} w`, 1]]);
+  assert.deepEqual(lineDepths(START, [LINE], 1), []);
+  assert.deepEqual(lineDepths(START, [['', LINE[1]]], 20), [[`${E5} w`, 18]]);
+  assert.deepEqual(lineDepths('', [LINE], 20), []);
+});
+
+test('rememberDepths keeps the deeper look at each position', () => {
+  const { rememberDepths } = require('../src/logic.js');
+  const memo = new Map();
+  rememberDepths(memo, [['a', 20], ['b', 10]]);
+  rememberDepths(memo, [['a', 12], ['b', 15]]);
+  assert.deepEqual([...memo], [['a', 20], ['b', 15]]);
+});
+
+test('rememberDepths lets the positions filed longest ago go first', () => {
+  const { rememberDepths } = require('../src/logic.js');
+  const memo = rememberDepths(new Map(), [['a', 5], ['b', 5], ['c', 5]], 3);
+  // a gets deeper, which files it again, so b is now the oldest.
+  rememberDepths(memo, [['a', 6], ['d', 5]], 3);
+  assert.deepEqual([...memo.keys()], ['c', 'a', 'd']);
+});
+
+test('carriedDepth shows the line\'s depth until this position\'s own search gets there', () => {
+  const { carriedDepth, lineDepths, rememberDepths } = require('../src/logic.js');
+  const memo = rememberDepths(new Map(), lineDepths(START, [LINE], 20));
+  const afterE4 = `${E4} b KQkq - 0 1`;
+  assert.equal(carriedDepth(memo, afterE4, 0), 19);
+  assert.equal(carriedDepth(memo, afterE4, 12), 19);
+  assert.equal(carriedDepth(memo, afterE4, 19), null);
+  assert.equal(carriedDepth(memo, afterE4, 23), null);
+});
+
+test('carriedDepth knows only positions a line came through, with the same side to move', () => {
+  const { carriedDepth, lineDepths, rememberDepths } = require('../src/logic.js');
+  const memo = rememberDepths(new Map(), lineDepths(START, [LINE], 20));
+  assert.equal(carriedDepth(memo, START, 0), null);
+  assert.equal(carriedDepth(memo, `${E4} w KQkq - 0 1`, 0), null);
+  assert.equal(carriedDepth(memo, '', 0), null);
+});
+
+test('DEFAULTS keep the depth while the engine catches up', () => {
+  assert.equal(DEFAULTS.keepDepth, true);
+});

@@ -25,6 +25,7 @@
   const shortcuts = document.getElementById('shortcuts');
   const playedMove = document.getElementById('playedMove');
   const underPieces = document.getElementById('underPieces');
+  const keepDepth = document.getElementById('keepDepth');
 
   const depthLabel = n => (n > 0 ? String(n) : 'off');
   const percent = n => Math.round(n * 100) + '%';
@@ -67,6 +68,7 @@
     shortcuts.checked = s.shortcuts;
     playedMove.checked = s.playedMove;
     underPieces.checked = s.underPieces;
+    keepDepth.checked = s.keepDepth;
     colorInputs.forEach(input => (input.value = s.colors[Number(input.dataset.rank)] || DEFAULTS.colors[Number(input.dataset.rank)]));
   }
 
@@ -86,6 +88,7 @@
       shortcuts: shortcuts.checked,
       playedMove: playedMove.checked,
       underPieces: underPieces.checked,
+      keepDepth: keepDepth.checked,
       colors: colorInputs.map(i => i.value),
     };
     opacityValue.value = s.opacity.toFixed(2);
@@ -103,7 +106,7 @@
   }
 
   chrome.storage.sync.get(DEFAULTS, stored => render({ ...DEFAULTS, ...stored }));
-  [enabled, mode, normalize, lineDepth, lineOpacity, opacity, uniformWidth, width, border, borderColor, borderWidth, shortcuts, playedMove, underPieces, ...colorInputs].forEach(el => el.addEventListener('input', save));
+  [enabled, mode, normalize, lineDepth, lineOpacity, opacity, uniformWidth, width, border, borderColor, borderWidth, shortcuts, playedMove, underPieces, keepDepth, ...colorInputs].forEach(el => el.addEventListener('input', save));
   document.getElementById('reset').addEventListener('click', () => {
     chrome.storage.sync.set({ ...DEFAULTS, colors: [...DEFAULTS.colors] });
     render(DEFAULTS);
