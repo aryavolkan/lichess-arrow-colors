@@ -61,6 +61,8 @@
   <p class="note">Where the game branches and the engine prefers another move, the move that was played is drawn as a solid arrow, white for White's move and black for Black's, in place of lichess's faint one.</p>
   <label><span>Keyboard shortcuts</span><input type="checkbox" id="shortcuts"></label>
   <p class="note">Keys 1 to 5 put that engine line on the board on its own, as pointing at it does. Space plays the picked line's first move; the same key again, or Escape, lets it go.</p>
+  <label><span>Keep the depth while the engine catches up</span><input type="checkbox" id="keepDepth"></label>
+  <p class="note">After a move from one of the engine's lines, the depth readout keeps showing how deep that line was searched, one less for each move into it, until the new position's own search gets there. Hover the readout to see both.</p>
   <button id="reset">Reset to defaults</button>
   <p class="note">Changes apply immediately on open lichess tabs. Threat-mode and hand-drawn arrows are left untouched.</p>
   <script src="logic.js"></script>

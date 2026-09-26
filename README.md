@@ -182,6 +182,29 @@ Arrows are drawn longest first, so where two cross, the shorter one lies on
 top. A long arrow still reads from the length of shaft either side of the
 crossing; a one-square arrow buried under it does not.
 
+## The depth readout
+
+Lichess starts every position's search again from depth 1, even when you have
+just played a move from one of the engine's lines and the engine was already
+looking down that line. Stockfish keeps what it found in its hash, but with
+five lines on, that got the new search to the same depth in only about two
+thirds of the time it took from nothing, in a test with Stockfish 19, so for
+most of the search the readout sits well below where it was.
+
+The line was searched, though. Every line of a multi-line search is searched
+to the depth shown, so the position one move into a line has been looked at
+one less deep, two moves in two less, and so on. After a move from a line, the
+readout shows that depth instead, until this position's own search gets there,
+and then it is lichess's own again. Keep playing the engine's moves and the
+depth goes down one a move rather than back to zero.
+
+While it shows a carried depth the readout has a dotted underline, and
+hovering it says both depths: how deep the line that led here was searched,
+and how far this position's own search has got. The lines in the panel and
+the arrows on the board are still this position's own search, so until it
+catches up they can change as it goes deeper. Threat mode and cloud evals are
+left as lichess shows them. It can be turned off on the options page.
+
 ## Install
 
 1. Clone or download this folder.
@@ -339,6 +362,32 @@ The extension collects no data. See [PRIVACY.md](PRIVACY.md).
   whatever group holds the line, not the arrow's outer one.
 - Threat-mode arrows (red), hand-drawn arrows and variation arrows other than
   the played move are not touched.
+- Lichess keeps an eval on each node of its move tree and fills in only the
+  node being searched, so a move played from a line lands on a node with
+  none, and moving to it stops the search and sends Stockfish a new `go`,
+  which counts depth from 1. The extension files, for each position the
+  panel's lines go through, the depth shown less the moves into the line, and
+  keeps the deeper figure when it sees one. Positions are filed by board and
+  side to move, which is what a line's `data-board` and the panel's
+  `data-fen` both give, so a transposition finds its depth too.
+- The readout is the first text in the engine box's `.info`, after the "go
+  deeper" button when there is one. Lichess writes it in the page's language,
+  so the carried depth is written into lichess's own words for it, and while
+  lichess shows "Calculating moves" instead, into the last depth readout it
+  showed. Lichess only rewrites the text when its own changes, so its text is
+  kept to put back when the carried depth goes.
+- The readout ends in a word joiner, which has no width, while it shows a
+  carried depth. When lichess's search reaches that depth it writes the very
+  words the carried readout says, and without the mark there would be no
+  telling the two apart.
+- The depth changes as text, which the page-wide observer does not watch:
+  text changes all over the site, every clock tick among them. The engine box
+  has an observer of its own for its text, which redoes only the readout.
+- The panel's rows carry `data-uci` only when they show an eval of this
+  position, and the readout says a depth only then too. Without one it says
+  something else, such as how many MiB of the engine have loaded, whose
+  numbers are not a depth, so it is only replaced there while the engine is
+  searching and it has no number in it.
 
 ## Development
 

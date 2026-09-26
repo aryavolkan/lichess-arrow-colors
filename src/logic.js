@@ -75,7 +75,16 @@
     // Draw every arrow behind the pieces rather than over them. The numbers
     // on the best line stay over the pieces, where they can be read.
     underPieces: true,
+    // After a move from one of the engine's lines, keep the depth readout at
+    // how deep that line was searched until the new search gets there,
+    // rather than starting again from zero.
+    keepDepth: true,
   });
+
+  // How many positions a carried depth is kept for. Every engine update files
+  // one per move of each line it shows, so this is a few hundred positions'
+  // worth of lines; the ones filed longest ago go first.
+  const DEPTH_MEMO = 5000;
 
   /**
    * chessground stores a comma-joined hash on every shape <g>, e.g.
@@ -641,6 +650,86 @@
       : { color: '#ffffff', outline: '#000000' };
   }
 
+  /** The depth in lichess's engine readout ("Depth 23"), or 0 when it shows none. */
+  function depthIn(text) {
+    const m = /\d+/.exec(typeof text === 'string' ? text : '');
+    return m ? Number(m[0]) : 0;
+  }
+
+  /**
+   * A depth readout in lichess's own words, made from one it has shown:
+   * "Depth 30" and 29 make "Depth 29", in whatever language the page is in.
+   * Null when `sample` has no number in it to replace.
+   */
+  function withDepth(sample, depth) {
+    if (typeof sample !== 'string' || !/\d/.test(sample)) return null;
+    return sample.replace(/\d+/, String(depth));
+  }
+
+  /**
+   * A position as carried depths are filed: the board and whose move it is,
+   * which is all the engine panel says about a position a line goes through.
+   */
+  function positionKey(fen) {
+    const [board, turn] = typeof fen === 'string' ? fen.split(' ') : [];
+    return board ? `${board} ${turn === 'b' ? 'b' : 'w'}` : null;
+  }
+
+  /**
+   * How deep the engine has looked into each position along the lines it
+   * shows. `fen` is the position the lines start from, each line is its moves
+   * as the engine panel writes them, "board|uci" with the board after the
+   * move, and `depth` is the depth the panel shows. Stockfish searches every
+   * line of a multi-line search to that depth, so the position one move into
+   * a line has been looked at one less deep, two moves in two less, and so on.
+   *
+   * Returns [positionKey, depth] pairs.
+   */
+  function lineDepths(fen, lines, depth) {
+    const key = positionKey(fen);
+    if (!key || !(depth > 1)) return [];
+    const out = [];
+    for (const line of lines || []) {
+      let side = key.slice(-1);
+      for (let ply = 0; ply < (line || []).length && depth - ply - 1 > 0; ply++) {
+        side = side === 'w' ? 'b' : 'w';
+        const board = typeof line[ply] === 'string' ? line[ply].split('|')[0] : '';
+        if (board) out.push([`${board} ${side}`, depth - ply - 1]);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * File `entries` from lineDepths in `memo`, a Map, keeping the deeper of
+   * the old and the new depth for each position. A position that gets deeper
+   * moves to the back, and past `cap` positions the ones at the front go.
+   */
+  function rememberDepths(memo, entries, cap = DEPTH_MEMO) {
+    for (const [key, depth] of entries || []) {
+      if ((memo.get(key) || 0) >= depth) continue;
+      memo.delete(key);
+      memo.set(key, depth);
+    }
+    for (const key of memo.keys()) {
+      if (memo.size <= cap) break;
+      memo.delete(key);
+    }
+    return memo;
+  }
+
+  /**
+   * The depth to show for the position `fen` in place of `live`, the one
+   * lichess shows: how deep a line through it was searched, while that is
+   * deeper. Null once lichess's own search has caught up, and for a position
+   * no line has come through.
+   */
+  function carriedDepth(memo, fen, live) {
+    const key = positionKey(fen);
+    const carried = (key && memo.get(key)) || 0;
+    return carried > (live || 0) ? carried : null;
+  }
+
   function colorForRank(rank, palette) {
     if (rank < 0 || !palette || !palette.length) return null;
     return palette[Math.min(rank, palette.length - 1)];
@@ -653,6 +742,7 @@
     continuationMoves, lineForArrow, squarePoint, calibrate, arrowEndpoints, labelPoint,
     stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, shortcutFor,
     moveFromPath, playedMove, playedStyle,
+    depthIn, withDepth, positionKey, lineDepths, rememberDepths, carriedDepth, DEPTH_MEMO,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, LABEL_RADIUS, LABEL_STEP, LABEL_FONT, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
