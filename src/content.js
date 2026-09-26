@@ -168,12 +168,18 @@
    * translucent arrow over its own outline would let the outline show through
    * the body and muddy the colour; an opaque arrow inside a faded group keeps
    * the outline at the edges where it belongs.
+   *
+   * Where the move tree branches, lichess wraps the lines of the arrow the
+   * branch goes on with in a group of their own, faded again by the brush.
+   * That left the arrow for the move played, when the engine agrees with it,
+   * the faintest on the board, so the inner group is drawn at full strength
+   * and the arrow faded once, like every other.
    */
-  function setGroupOpacity(group) {
+  function setGroupOpacity(group, opacity = settings.opacity) {
     if (!group.hasAttribute('data-lac-gop')) {
       group.setAttribute('data-lac-gop', group.getAttribute('opacity') ?? '');
     }
-    group.setAttribute('opacity', String(settings.opacity));
+    group.setAttribute('opacity', String(opacity));
   }
 
   function restoreGroupOpacity(group) {
@@ -197,8 +203,14 @@
    * underneath everything the overshooting stripe painted over the head's own
    * outline and bit a notch out of its back corner. Painted in pieces, the
    * head lands whole on top of whatever the shaft does there.
+   *
+   * Beneath it in whatever group holds the line, which is not always the
+   * arrow's own: where the move tree branches, lichess marks the move the
+   * branch goes on with by wrapping that arrow's lines in a group of their
+   * own, and putting the outline in the outer one threw and stopped the pass
+   * part way through the board.
    */
-  function addBorder(svg, boardIdx, group, line, head = true, outlineOnly = false) {
+  function addBorder(svg, boardIdx, line, head = true, outlineOnly = false) {
     const arrowWidth = parseStrokeWidth(line.getAttribute('stroke-width'));
     const width = borderStrokeWidth(arrowWidth, settings.borderWidth);
     if (!width) return;
@@ -215,7 +227,7 @@
     } else {
       border.removeAttribute('marker-end');
     }
-    group.insertBefore(border, line);
+    line.parentNode.insertBefore(border, line);
   }
 
   const ownLines = group => Array.from(group.querySelectorAll('line:not([data-lac-border])'));
@@ -241,6 +253,7 @@
     group.removeAttribute('data-lac');
     clearBorders(group);
     restoreGroupOpacity(group);
+    group.querySelectorAll('g[data-lac-gop]').forEach(restoreGroupOpacity);
     group.removeAttribute('visibility');
     group.querySelectorAll('line[data-lac-orig]').forEach(line => {
       const orig = JSON.parse(line.getAttribute('data-lac-orig'));
@@ -501,7 +514,7 @@
         const line = newLine(ref.line, m.at, focus.color, width);
         line.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, focus.color)})`);
         g.appendChild(line);
-        if (settings.border) addBorder(svg, boardIdx, g, line);
+        if (settings.border) addBorder(svg, boardIdx, line);
         return g;
       }
 
@@ -534,7 +547,7 @@
       lines.push([head, true]);
 
       lines.forEach(([line]) => g.appendChild(line));
-      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, g, line, withHead, true));
+      if (settings.border) lines.forEach(([line, withHead]) => addBorder(svg, boardIdx, line, withHead, true));
       return g;
     });
 
@@ -670,11 +683,12 @@
         g.setAttribute('data-lac', stamp);
         clearBorders(g);
         setGroupOpacity(g);
+        g.querySelectorAll('g').forEach(inner => setGroupOpacity(inner, 1));
         setHidden(g, hidden);
         const marker = ensureMarker(svg, boardIdx, color);
         ownLines(g).forEach(line => {
           paint(line, color, marker);
-          if (settings.border) addBorder(svg, boardIdx, g, line);
+          if (settings.border) addBorder(svg, boardIdx, line);
         });
       });
     });
