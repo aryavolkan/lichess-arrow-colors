@@ -469,9 +469,15 @@
       groups: arrows.concat(labels),
       parsed: mine.concat(labels.map(() => ({ label: true }))),
     });
+    // Each arrow is matched back to its move by the key it carries, not by
+    // where it sits: sorted longest first, the arrows no longer stand in the
+    // order the line plays them, and pairing them up by position handed each
+    // one another's length, so every pass sorted them into a new order and
+    // the next pass sorted them back.
     const existing = Array.from(parent.querySelectorAll(`:scope > g[${EXTRA}]`));
-    if (svg.getAttribute(LINE_STAMP) === stamp && existing.length === mine.length) {
-      return withLabels(existing, Array.from(parent.querySelectorAll(`:scope > g[${LABEL}]`)));
+    const kept = mine.map(m => existing.find(g => g.getAttribute(EXTRA) === m.key));
+    if (svg.getAttribute(LINE_STAMP) === stamp && existing.length === mine.length && kept.every(Boolean)) {
+      return withLabels(kept, Array.from(parent.querySelectorAll(`:scope > g[${LABEL}]`)));
     }
 
     clearExtras(svg);
@@ -484,7 +490,7 @@
     const marker = ensureMarker(svg, boardIdx, color, stripedHead(boardIdx));
     const made = mine.map(m => {
       const g = document.createElementNS(SVG_NS, 'g');
-      g.setAttribute(EXTRA, '');
+      g.setAttribute(EXTRA, m.key);
       parent.appendChild(g);
 
       // The first move of a picked line, which lichess drew no arrow for:
@@ -587,7 +593,13 @@
     const sorted = drawOrder(parsed).map(i => groups[i]);
     // Moving nodes is itself a mutation, and the observer would send us
     // straight back here, so only touch the DOM when the order really changes.
-    if (sorted.every((g, i) => g === groups[i])) return;
+    // That means the order they stand in on the page, not the order `groups`
+    // lists them in: our own arrows come after lichess's there, but sort in
+    // among them, and checking against the list moved every group on every
+    // pass.
+    const members = new Set(groups);
+    const current = Array.from(parent.children).filter(el => members.has(el));
+    if (sorted.every((g, i) => g === current[i])) return;
     sorted.forEach(g => parent.appendChild(g));
   }
 
@@ -750,7 +762,22 @@
     window.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('mouseover', onMouseOver, true);
     apply();
-    new MutationObserver(schedule).observe(document.documentElement, {
+    // The pass runs in the observer's own callback, not on the next animation
+    // frame. chessground redraws inside an animation frame of its own, so a
+    // pass put off to the next one came a frame late, and that frame went to
+    // the screen with lichess's pale arrows and none of ours. The callback
+    // runs before the browser paints. What the pass changes itself is taken
+    // off the observer's queue afterwards, so a pass never sets off another:
+    // run straight away, one that did would lock up the page rather than
+    // cost a frame.
+    const observer = new MutationObserver(() => {
+      try {
+        apply();
+      } finally {
+        observer.takeRecords();
+      }
+    });
+    observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
       attributes: true,

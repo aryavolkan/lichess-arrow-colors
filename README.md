@@ -209,7 +209,11 @@ The extension collects no data. See [PRIVACY.md](PRIVACY.md).
 - chessground removes any shape group whose `cgHash` it does not recognise, so
   the added arrows go whenever it redraws the board. They are put back by the
   same pass that recolours everything else, which the `MutationObserver` runs
-  on that very redraw.
+  on that very redraw, in its own callback and so before the browser paints.
+  chessground redraws inside an animation frame, so a pass left for the next
+  frame would always come one late, and that frame would show lichess's own
+  pale arrows with none of the added ones: the arrows would flicker every time
+  the engine moved them.
 - The arrowhead is a `marker`, so its stripes are drawn in marker units, where
   one unit is the line's stroke width. That is the same measure the shaft's
   stripes are sized in, so a fixed 1.5 units to a stripe and its gap keeps the
