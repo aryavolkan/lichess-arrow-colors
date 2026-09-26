@@ -1,7 +1,7 @@
 # Chrome Web Store listing
 
 Everything the submission form asks for. The package to upload is
-`dist/lichess-arrow-colors-1.11.1.zip`, also attached to the GitHub release.
+`dist/lichess-arrow-colors-1.11.2.zip`, also attached to the GitHub release.
 
 ## Name
 
