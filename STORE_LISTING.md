@@ -141,7 +141,22 @@ up rather than contradicting them.
 
 ## Screenshots
 
-Ready to upload, in `store/screenshots/`:
+Upload these four, in `store/screenshots/`. They show the extension as 1.11
+draws it, on a live broadcast game:
+
+| File | Size | Shows |
+|------|------|-------|
+| `played-move-inaccuracy-640x400.png` | 640x400 | The engine's best line numbered 1 to 7, and the move actually played, ...a5?!, as a solid black arrow |
+| `played-move-blunder-640x400.png` | 640x400 | A blunder, ...Rxb3??, in black, with the best line, ...Rh3+, numbered 1 to 7 |
+| `best-line-behind-pieces-640x400.png` | 640x400 | A seven-move best line across the board, every arrow behind the pieces |
+| `best-line-alternatives-640x400.png` | 640x400 | White to move: the best move, g6, and its line numbered 1 to 7, the other moves shading towards red |
+
+They were taken on a real lichess board with the extension installed, then
+cropped to 16:10 around the round list and the board and scaled to 640x400.
+
+The older screenshots, made by `scripts/shoot.js`, predate 1.10.0: their
+arrows are drawn over the pieces and they have no played move. The README
+still uses the 1280x800 pair.
 
 | File | Size | Shows |
 |------|------|-------|
@@ -150,10 +165,9 @@ Ready to upload, in `store/screenshots/`:
 | `arrows-spread-1280x800.png` | 1280x800 | The same spread, with more of the page |
 | `arrows-equal-1280x800.png` | 1280x800 | The same equal position, with more of the page |
 
-The 640x400 pair is better framed; the board fills the picture. Upload one pair
-or the other, not a mix of sizes.
+Don't mix sizes in one upload.
 
-Regenerate them with:
+Regenerate the older ones with:
 
 ```bash
 node scripts/shoot.js                      # 1280x800
