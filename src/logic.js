@@ -69,6 +69,12 @@
     // Keys 1 to 9 put an engine line on the board on its own, as pointing at
     // it does; Space plays the line's first move while one is picked.
     shortcuts: true,
+    // Where the move tree branches and the engine prefers another move, draw
+    // the move that was played as a solid white or black arrow.
+    playedMove: true,
+    // Draw every arrow behind the pieces rather than over them. The numbers
+    // on the best line stay over the pieces, where they can be read.
+    underPieces: true,
   });
 
   /**
@@ -255,13 +261,8 @@
     });
   }
 
-  /**
-   * How far an arrow travels, in squares squared. Circles count as 0, and a
-   * numeral less than that: it is drawn after every arrow, whatever is
-   * underneath it, so a number is never buried by an arrow crossing it.
-   */
+  /** How far an arrow travels, in squares squared. Circles count as 0. */
   function arrowLength(a) {
-    if (a && a.label) return -1;
     if (!a || !a.dest || !SQUARE.test(a.orig) || !SQUARE.test(a.dest)) return 0;
     const dx = a.dest.charCodeAt(0) - a.orig.charCodeAt(0);
     const dy = a.dest.charCodeAt(1) - a.orig.charCodeAt(1);
@@ -586,6 +587,60 @@
     return null;
   }
 
+  // Lichess names every move in its move tree by two characters, scalachess's
+  // UciCharPair: each square is its index from a1 shifted up to '#', and a
+  // promotion's second character counts on past the 64 squares, eight to a
+  // piece, to say both the file it lands on and what it becomes. Drops count
+  // on past those.
+  const PAIR_SHIFT = 35;
+  const PROMOTION_CHARS = 8 * 5;
+
+  const squareName = i => String.fromCharCode(97 + (i % 8)) + String.fromCharCode(49 + Math.floor(i / 8));
+
+  /**
+   * The move a lichess move-tree path ends with, as "e2e4", or null. A path
+   * is every move from the start of the tree, two characters each, which is
+   * what lichess puts in the `p` attribute of each move in its move list.
+   * Drops draw no arrow and come back as null.
+   */
+  function moveFromPath(path) {
+    if (typeof path !== 'string' || path.length < 2 || path.length % 2) return null;
+    const from = path.charCodeAt(path.length - 2) - PAIR_SHIFT;
+    const to = path.charCodeAt(path.length - 1) - PAIR_SHIFT;
+    if (!(from >= 0 && from < 64) || !(to >= 0)) return null;
+    if (to < 64) return squareName(from) + squareName(to);
+    if (to >= 64 + PROMOTION_CHARS) return null;
+    // A promotion lands on the last rank on the promoting side, which is
+    // whichever end of the board the pawn is next to.
+    const rank = Math.floor(from / 8) >= 4 ? 7 : 0;
+    return squareName(from) + squareName(rank * 8 + ((to - 64) % 8));
+  }
+
+  /**
+   * The move the move tree goes on with from the position at `path`, when
+   * that is worth drawing as the move that was played: the tree branches
+   * here, which is where lichess marks the played move among the others, and
+   * the engine's best move `best` is a different one. Null otherwise.
+   *
+   * `paths` are the paths of the moves in the move list in the order lichess
+   * lists them, which puts the move the line goes on with first.
+   */
+  function playedMove(path, paths, best) {
+    if (!best) return null;
+    const here = typeof path === 'string' ? path : '';
+    const next = (paths || []).filter(p => typeof p === 'string' && p.length === here.length + 2 && p.startsWith(here));
+    if (next.length < 2) return null;
+    const key = moveFromPath(next[0]);
+    return key && key !== best ? key : null;
+  }
+
+  /** The played move's arrow: the mover's own colour, outlined in the other one so it shows on any square. */
+  function playedStyle(turn) {
+    return turn === 'black'
+      ? { color: '#000000', outline: '#ffffff' }
+      : { color: '#ffffff', outline: '#000000' };
+  }
+
   function colorForRank(rank, palette) {
     if (rank < 0 || !palette || !palette.length) return null;
     return palette[Math.min(rank, palette.length - 1)];
@@ -597,6 +652,7 @@
     parseStrokeWidth, borderStrokeWidth, borderMarker, CG_HEAD, arrowStrokeWidth, CG_WIDTH_UNIT,
     continuationMoves, lineForArrow, squarePoint, calibrate, arrowEndpoints, labelPoint,
     stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, shortcutFor,
+    moveFromPath, playedMove, playedStyle,
     DEFAULTS, MAX_SHIFT, MIN_SPAN, LABEL_RADIUS, LABEL_STEP, LABEL_FONT, BEST_BRUSH, ALT_BRUSH,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

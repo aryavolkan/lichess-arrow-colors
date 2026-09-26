@@ -342,17 +342,6 @@ test('drawOrder keeps equally long arrows in the order lichess gave them', () =>
   assert.deepEqual(drawOrder(arrows), [0, 1, 2]);
 });
 
-test('drawOrder keeps the numerals on top of everything, circles included', () => {
-  // The numeral comes first here, so passing only means it was moved last on
-  // purpose and not by the tie that keeps equal shapes in the order given.
-  const shapes = [
-    { label: true },              // a numeral
-    { orig: 'e4', dest: null },   // a circle
-    { orig: 'e2', dest: 'e4' },
-  ];
-  assert.deepEqual(drawOrder(shapes), [2, 1, 0]);
-});
-
 test('drawOrder puts circles and unreadable shapes on top of every arrow', () => {
   const arrows = [
     { orig: 'e4', dest: null },
@@ -736,4 +725,82 @@ test('shortcutFor: Space plays only while a line is picked, Escape clears withou
   assert.deepEqual(shortcutFor('Escape', 5, 1), { type: 'clear', passive: true });
   assert.equal(shortcutFor('a', 5, 1), null);
   assert.equal(shortcutFor(undefined, 5, 1), null);
+});
+
+// Lichess's move tree names each move by two characters, one per square
+// counted from a1 and shifted up to '#' (scalachess's UciCharPair). A path is
+// those pairs one after another, and the last pair is the move it leads to.
+const pair = (from, to) => String.fromCharCode(35 + from, 35 + to);
+
+test('moveFromPath reads the last move of a lichess move-tree path', () => {
+  const { moveFromPath } = require('../src/logic.js');
+  assert.equal(moveFromPath('/?'), 'e2e4');
+  assert.equal(moveFromPath('/?WG)8XP'), 'f7f6');
+  // Backslash is b8: a path is raw text, whatever characters it holds.
+  assert.equal(moveFromPath('/?WG)8\\M'), 'b8c6');
+  assert.equal(moveFromPath(pair(4, 7)), 'e1h1');
+});
+
+test('moveFromPath reads a promotion, whose second character names the file and the piece', () => {
+  const { moveFromPath } = require('../src/logic.js');
+  // 35 + 64 + 8 * piece + file, the pieces in the order queen, rook, bishop, knight, king.
+  assert.equal(moveFromPath('W' + String.fromCharCode(35 + 64 + 0 + 4)), 'e7e8');
+  assert.equal(moveFromPath('W' + String.fromCharCode(35 + 64 + 0 + 3)), 'e7d8');
+  assert.equal(moveFromPath('.' + String.fromCharCode(35 + 64 + 24 + 3)), 'd2d1');
+});
+
+test('moveFromPath has no move for a drop, an empty path or junk', () => {
+  const { moveFromPath } = require('../src/logic.js');
+  assert.equal(moveFromPath('?' + String.fromCharCode(35 + 64 + 40)), null);
+  assert.equal(moveFromPath(''), null);
+  assert.equal(moveFromPath('/'), null);
+  assert.equal(moveFromPath('!!'), null);
+  assert.equal(moveFromPath(null), null);
+});
+
+// 1. e4 e5 2. Nf3 f6 (2... Nc6) 3. Nxe5, as lichess lists it.
+const TREE = ['/?', '/?WG', '/?WG)8', '/?WG)8XP', '/?WG)8\\M', '/?WG)8XP8G'];
+
+test('playedMove is the move the tree goes on with where it branches and the engine prefers another', () => {
+  const { playedMove } = require('../src/logic.js');
+  assert.equal(playedMove('/?WG)8', TREE, 'b8c6'), 'f7f6');
+  assert.equal(playedMove('/?WG)8', TREE, 'g8f6'), 'f7f6');
+});
+
+test('playedMove has nothing to add where the engine plays the same move', () => {
+  const { playedMove } = require('../src/logic.js');
+  assert.equal(playedMove('/?WG)8', TREE, 'f7f6'), null);
+});
+
+test('playedMove leaves a position alone where the tree does not branch', () => {
+  const { playedMove } = require('../src/logic.js');
+  assert.equal(playedMove('/?WG', TREE, 'b1c3'), null);
+  assert.equal(playedMove('/?WG)8XP8G', TREE, 'd8e7'), null);
+});
+
+test('playedMove needs an engine move to compare with', () => {
+  const { playedMove } = require('../src/logic.js');
+  assert.equal(playedMove('/?WG)8', TREE, null), null);
+  assert.equal(playedMove('/?WG)8', TREE, ''), null);
+});
+
+test('playedMove counts only the moves straight after this one, from the start of the game too', () => {
+  const { playedMove } = require('../src/logic.js');
+  const tree = ['/?', '0@', '/?WG', '0@WG'];
+  assert.equal(playedMove('', tree, 'g1f3'), 'e2e4');
+  assert.equal(playedMove('/?', tree, 'c7c5'), null);
+});
+
+test('playedStyle draws the played move in the mover\'s colour, outlined in the other', () => {
+  const { playedStyle } = require('../src/logic.js');
+  assert.deepEqual(playedStyle('white'), { color: '#ffffff', outline: '#000000' });
+  assert.deepEqual(playedStyle('black'), { color: '#000000', outline: '#ffffff' });
+});
+
+test('DEFAULTS show the played move', () => {
+  assert.equal(DEFAULTS.playedMove, true);
+});
+
+test('DEFAULTS draw the arrows behind the pieces', () => {
+  assert.equal(DEFAULTS.underPieces, true);
 });

@@ -91,9 +91,9 @@ say whose arrows these are, so there is nothing a thinner line would add.
 
 How strongly they are drawn has its own slider on the options page, from a
 tenth of a regular arrow up to the full strength of one. The numbers themselves are drawn solid, and
-over every arrow on the board, since a number you cannot read is not worth
-drawing: a faded one takes on whatever it happens to lie over, and one buried
-under a crossing arrow is not there at all.
+over every arrow and every piece on the board, since a number you cannot read
+is not worth drawing: a faded one takes on whatever it happens to lie over,
+and one buried under a crossing arrow or a piece is not there at all.
 
 Both sides' moves are drawn, since a line only makes sense with the replies in
 it. Four moves past the first are drawn by default, numbered 2 to 5; the
@@ -145,6 +145,36 @@ Moving the pointer onto the panel hands the board back to lichess's own hover,
 and stepping to another position lets the pick go. Keys typed into a field, or
 pressed with a modifier held, are not touched. The shortcuts can be turned off
 on the options page.
+
+## The played move
+
+Where the game branches, at a mistake in a game with computer analysis or
+where you have tried another move yourself, lichess marks the move that was
+actually played with a faint white arrow under the pieces, and a one-square
+move all but disappears under the piece making it.
+
+Where the engine prefers another move, the extension draws the played move
+solid instead: a white arrow for White's move and a black one for Black's,
+over every engine arrow, and outlined in the other colour
+so a black arrow still shows on a dark square. Lichess's faint arrow goes. If
+the played move is one of the engine's other lines, its engine arrow gives way
+to the played one too, so a white or black arrow always means the move that
+was played; how good it was is still in the panel.
+
+Where the engine agrees with the move that was played, its green arrow already
+says so and nothing is added. Positions where the game does not branch, and
+the other moves of a branch, are left as lichess draws them. It can be turned
+off on the options page.
+
+## Arrows behind the pieces
+
+Lichess draws its arrows over the pieces, which buries the piece an arrow
+starts from and any piece it crosses. Every arrow is drawn behind the pieces
+instead, the engine's, the extension's and your own hand-drawn ones alike,
+still over the squares and their highlights. An arrow shows through wherever a
+piece does not cover it. The numbers on the best line stay over the pieces,
+where they can be read. Switch it off on the options page to have the arrows
+back on top.
 
 ## Overlapping arrows
 
@@ -233,9 +263,15 @@ The extension collects no data. See [PRIVACY.md](PRIVACY.md).
   the marker's id carries which of the two it is.
 - The numerals are drawn as their own groups rather than inside the arrows',
   because opacity on a group applies to everything in it and both the added
-  arrows and lichess's own are deliberately faded. In the longest-first ordering they count as
-  shorter than a circle, so they sort after every shape on the board and
-  nothing can be painted over them.
+  arrows and lichess's own are deliberately faded, and in an svg of their own
+  laid over lichess's arrow layer, so they can sit over the pieces while the
+  arrows are behind them and over every arrow either way.
+- chessground stacks the pieces at `z-index` 2 and its arrow layer at 2 after
+  them, which is what puts lichess's arrows on top, and the layer it draws its
+  own under-the-pieces arrows in at 1. Behind the pieces, the arrow layer and
+  the played move's drop to 1 by an inline `z-index`, which is all it takes to
+  put them back. The numbers' layer sits at 3, over the pieces and under the
+  layer lichess puts its annotation badges in, at 4.
 - The colour is the best move's own, taken down in lightness: an `hsl()` from
   the gradient loses lightness directly, a hex colour from the rank palette
   has its channels dimmed. Both stay recognisably the same green.
@@ -284,8 +320,25 @@ The extension collects no data. See [PRIVACY.md](PRIVACY.md).
   ones it crosses. The extension reorders the arrow groups longest first,
   leaving short arrows on top. chessground diffs its shapes by `cgHash` rather
   than by position, so moving the groups does not disturb it.
-- Threat-mode arrows (red), hand-drawn arrows and variation arrows are not
-  touched.
+- Every move in lichess's move list carries a `p` attribute, its path through
+  the move tree: two characters a move, scalachess's `UciCharPair`, one for
+  each square counted from a1 and shifted up to `#`, a promotion's second
+  character counting on past the 64 squares to name the file and the piece.
+  The moves one step on from the current one are where the tree goes next, so
+  the list alone says whether it branches here and which move it goes on with,
+  which is the first. Castling is king-takes-rook there, as it is in the
+  engine panel and on lichess's arrows, so the three compare directly.
+- Lichess's stylesheet draws the whole engine-arrow layer at 60% opacity, so
+  nothing inside it can come out solid. The played move is drawn in an svg of
+  its own, laid exactly over that layer and stacked just above it. chessground
+  does not know about it and leaves it alone when it redraws.
+- Lichess's arrow for the played move lives in a separate layer under the
+  pieces, and is hidden with `visibility`, which chessground never sets.
+- Where the tree branches, lichess wraps the lines of the engine arrow for the
+  move the branch goes on with in a group of their own. Outlines are put in
+  whatever group holds the line, not the arrow's outer one.
+- Threat-mode arrows (red), hand-drawn arrows and variation arrows other than
+  the played move are not touched.
 
 ## Development
 

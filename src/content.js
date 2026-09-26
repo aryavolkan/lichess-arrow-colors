@@ -6,7 +6,7 @@
     parseStrokeWidth, borderStrokeWidth, borderMarker, arrowStrokeWidth,
     continuationMoves, lineForArrow, calibrate, arrowEndpoints, labelPoint, LABEL_RADIUS, LABEL_STEP, LABEL_FONT,
     stripePattern, stripeTransform, splitAtHead, headStripes, darker, STRIPE_ANGLE, CG_HEAD, BEST_BRUSH, ALT_BRUSH, shortcutFor,
-    DEFAULTS } = globalThis.LAC;
+    playedMove, playedStyle, DEFAULTS } = globalThis.LAC;
   const hasStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync;
 
   let settings = { ...DEFAULTS };
@@ -209,21 +209,24 @@
    * branch goes on with by wrapping that arrow's lines in a group of their
    * own, and putting the outline in the outer one threw and stopped the pass
    * part way through the board.
+   *
+   * The outline is in the colour chosen on the options page unless `color`
+   * says otherwise, as it does for the black played-move arrow.
    */
-  function addBorder(svg, boardIdx, line, head = true, outlineOnly = false) {
+  function addBorder(svg, boardIdx, line, head = true, outlineOnly = false, color = settings.borderColor) {
     const arrowWidth = parseStrokeWidth(line.getAttribute('stroke-width'));
     const width = borderStrokeWidth(arrowWidth, settings.borderWidth);
     if (!width) return;
     const border = line.cloneNode(false);
     border.removeAttribute('data-lac-orig');
     border.setAttribute('data-lac-border', '');
-    border.setAttribute('stroke', settings.borderColor);
+    border.setAttribute('stroke', color);
     border.setAttribute('stroke-width', String(width));
     border.setAttribute('opacity', '1');
     if (head) {
       const geom = borderMarker(arrowWidth, settings.borderWidth);
       if (outlineOnly) Object.assign(geom, { fill: 'none', key: 'o' });
-      border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, settings.borderColor, geom)})`);
+      border.setAttribute('marker-end', `url(#${ensureMarker(svg, boardIdx, color, geom)})`);
     } else {
       border.removeAttribute('marker-end');
     }
@@ -262,6 +265,54 @@
     });
   }
 
+  // ---- layers of our own -----------------------------------------------
+
+  /**
+   * An svg of our own, laid exactly over lichess's arrow layer: the same size
+   * and the same coordinates, so what is drawn in it lines up with lichess's
+   * arrows. chessground does not know about it and leaves it alone when it
+   * redraws, and lichess's stylesheet, which draws its own layer at 60%
+   * opacity, does not reach it. The played move, which has to be solid, and
+   * the numbers, which have to sit over the pieces, are each drawn in one.
+   *
+   * The played move's layer comes straight after lichess's and the numbers'
+   * after that, so where two share a level, the numbers are on top.
+   */
+  function layerOf(svg, name, create) {
+    const host = svg.parentElement;
+    const found = host && host.querySelector(`:scope > svg[${name}]`);
+    if (found || !create || !host) return found || null;
+    const layer = document.createElementNS(SVG_NS, 'svg');
+    layer.setAttribute(name, '');
+    for (const a of ['viewBox', 'preserveAspectRatio']) {
+      if (svg.hasAttribute(a)) layer.setAttribute(a, svg.getAttribute(a));
+    }
+    layer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none';
+    const after = name === LABEL ? host.querySelector(`:scope > svg[${PLAYED}]`) : null;
+    (after || svg).after(layer);
+    return layer;
+  }
+
+  const setZ = (el, z) => {
+    if (el && el.style.zIndex !== z) el.style.zIndex = z;
+  };
+
+  /**
+   * Put the arrows behind the pieces, or leave them over them. chessground
+   * stacks the pieces at level 2 and lichess's arrow layer at 2 after them,
+   * which is what puts the arrows on top; the layer lichess draws its own
+   * under-the-pieces arrows in sits at 1, still over the squares and their
+   * highlights. Behind the pieces, lichess's arrow layer and the played move's
+   * drop to 1 as well. The numbers stay over the pieces either way, and under
+   * the layer lichess puts its annotation badges in, at 4.
+   */
+  function stack(svg) {
+    const under = settings.enabled && settings.underPieces;
+    setZ(svg, under ? '1' : '');
+    setZ(layerOf(svg, PLAYED, false), under ? '1' : '3');
+    setZ(layerOf(svg, LABEL, false), '3');
+  }
+
   // ---- the rest of the best line ---------------------------------------
 
   // Arrows we draw ourselves, for the moves of the best line that lichess
@@ -273,7 +324,9 @@
   const LINE_STAMP = 'data-lac-line';
 
   function clearExtras(svg) {
-    svg.querySelectorAll(`g[${EXTRA}], g[${LABEL}]`).forEach(el => el.remove());
+    svg.querySelectorAll(`g[${EXTRA}]`).forEach(el => el.remove());
+    const labels = layerOf(svg, LABEL, false);
+    if (labels) labels.remove();
     svg.removeAttribute(LINE_STAMP);
   }
 
@@ -321,7 +374,8 @@
    * own arrow is the line's first move, so it is 1 and the one after it is 2.
    *
    * It goes in a group of its own rather than the arrow's, because the added
-   * arrows are drawn faded and a faded number cannot be read.
+   * arrows are drawn faded and a faded number cannot be read, and in a layer
+   * of its own, over the pieces, where the arrows may be under them.
    */
   function makeLabel(at, ply, color, width, back) {
     // Clear of the arrow's own edge, outline included.
@@ -476,12 +530,6 @@
       ref.cal.flipped, ref.cal.margin,
       bestKey, moves.map(m => m.key + (m.drawn ? '=' : '')).join(' '),
     ].join(':');
-    // The labels ride along in the ordering with a length of nothing, which
-    // leaves them on top of every arrow.
-    const withLabels = (arrows, labels) => ({
-      groups: arrows.concat(labels),
-      parsed: mine.concat(labels.map(() => ({ label: true }))),
-    });
     // Each arrow is matched back to its move by the key it carries, not by
     // where it sits: sorted longest first, the arrows no longer stand in the
     // order the line plays them, and pairing them up by position handed each
@@ -490,7 +538,7 @@
     const existing = Array.from(parent.querySelectorAll(`:scope > g[${EXTRA}]`));
     const kept = mine.map(m => existing.find(g => g.getAttribute(EXTRA) === m.key));
     if (svg.getAttribute(LINE_STAMP) === stamp && existing.length === mine.length && kept.every(Boolean)) {
-      return withLabels(kept, Array.from(parent.querySelectorAll(`:scope > g[${LABEL}]`)));
+      return { groups: kept, parsed: mine };
     }
 
     clearExtras(svg);
@@ -558,7 +606,6 @@
     // A lone 1 on a board with nothing after it says nothing, so the move
     // lichess draws is numbered only once the line carries on past it.
     const carried = new Map();
-    const labels = [];
     // Two numerals on one arrow — a line that plays a move twice — step back
     // along the shaft rather than landing on each other.
     const stepBack = key => {
@@ -575,12 +622,9 @@
       const label = m.host >= 0
         ? labelOnArrow(groups[m.host], m.ply, m.ply ? color : focus.color, back)
         : makeLabel(shaftOf(m.at, width), m.ply, m.ply ? color : focus.color, width, back);
-      if (label) {
-        parent.appendChild(label);
-        labels.push(label);
-      }
+      if (label) layerOf(svg, LABEL, true).appendChild(label);
     }
-    return withLabels(made, labels);
+    return { groups: made, parsed: mine };
   }
 
   /** Colour per arrow group, or null to leave it alone. */
@@ -651,9 +695,89 @@
     else group.removeAttribute('visibility');
   }
 
+  // ---- the played move --------------------------------------------------
+
+  // Where the move tree branches, lichess marks the move that was played
+  // with a half-transparent white arrow under the pieces, where a short move
+  // is all but hidden by the piece making it. Where the engine prefers
+  // another move, the extension draws the played move instead, solid, in
+  // the mover's own colour, and over every engine arrow.
+  const PLAYED = 'data-lac-played';
+
+  /**
+   * The move that was played here, when it is worth drawing, as "f7f6".
+   * Every move in lichess's move list carries its path through the move
+   * tree, which is enough to tell where the tree branches and what the move
+   * after this one is; see playedMove for when it is drawn.
+   */
+  function readPlayed() {
+    const moves = Array.from(document.querySelectorAll('.tview2 move[p]'));
+    if (!moves.length) return null;
+    const here = document.querySelector('.tview2 move.active')?.getAttribute('p') || '';
+    return playedMove(here, moves.map(m => m.getAttribute('p')), readPvKeys()[0]);
+  }
+
+  const isMove = (p, key) => !!(key && p && p.dest && p.orig + p.dest === key);
+
+  function clearPlayed(svg) {
+    const layer = layerOf(svg, PLAYED, false);
+    if (layer) layer.remove();
+  }
+
+  /**
+   * Draw the played move, or take it away. Rebuilt only when something about
+   * it has changed. Returns whether it is on the board.
+   */
+  function syncPlayed(svg, boardIdx, groups, parsed, key) {
+    const ref = key ? calibrateFrom(groups, parsed, parsed.findIndex(p => p && p.brush === BEST_BRUSH)) : null;
+    const at = ref && arrowEndpoints(key.slice(0, 2), key.slice(2, 4), ref.cal);
+    if (!at) {
+      clearPlayed(svg);
+      return false;
+    }
+    const style = playedStyle(turnColor());
+    const width = drawnWidth(ref.line) || parseStrokeWidth(ref.line.getAttribute('stroke-width')) || DEFAULTS.width;
+    const stamp = [key, style.color, width, settings.border, settings.borderWidth, ref.cal.flipped, ref.cal.margin].join(':');
+    const layer = layerOf(svg, PLAYED, true);
+    if (!layer) return false;
+    const existing = layer.querySelector(':scope > g');
+    if (existing && existing.getAttribute(PLAYED) === stamp) return true;
+
+    if (existing) existing.remove();
+    // Its markers live in the layer's own defs, under ids of their own.
+    const ns = `${boardIdx}p`;
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute(PLAYED, stamp);
+    const line = newLine(ref.line, at, style.color, width);
+    line.setAttribute('marker-end', `url(#${ensureMarker(layer, ns, style.color)})`);
+    g.appendChild(line);
+    layer.appendChild(g);
+    // The outline is the other colour, so a black arrow still shows on a
+    // dark square and over black pieces.
+    if (settings.border) addBorder(layer, ns, line, true, false, style.outline);
+    return true;
+  }
+
+  /**
+   * Take lichess's own arrow for the played move off the board, and put back
+   * any taken off before. It lives in the layer under the pieces, next to
+   * the one engine arrows are drawn in. The arrows lichess draws there for
+   * the other moves of the branch are left as they are.
+   */
+  function hideLichessPlayed(svg, key) {
+    const below = svg.parentElement && svg.parentElement.querySelector(':scope > svg.cg-shapes-below');
+    if (!below) return;
+    below.querySelectorAll('g[cgHash]').forEach(g => {
+      const p = parseCgHash(g.getAttribute('cgHash'));
+      const hide = isMove(p, key) && p.brush === 'variation';
+      if (hide !== g.hasAttribute('visibility')) setHidden(g, hide);
+    });
+  }
+
   function apply() {
     checkPicked();
     markRows();
+    const played = settings.enabled && settings.playedMove ? readPlayed() : null;
     boardSvgs().forEach((svg, boardIdx) => {
       const groups = Array.from(svg.querySelectorAll(':scope > g > g[cgHash]'));
       const parsed = groups.map(g => parseCgHash(g.getAttribute('cgHash')));
@@ -663,21 +787,31 @@
       const ghost = settings.enabled ? pickedArrow(parsed) : null;
       const colors = settings.enabled ? colorsFor(ghost ? parsed.concat([ghost]) : parsed) : groups.map(() => null);
       const focus = settings.enabled ? focusFor(parsed, colors) : null;
+      // Lichess's own arrow for the played move goes only once ours is on
+      // the board, so the move is never left without one.
+      let shown = null;
       if (settings.enabled) {
         const extra = syncExtras(svg, boardIdx, groups, parsed, colors, focus);
         const all = groups.concat(extra.groups);
         if (all.length > 1) reorder(all, parsed.concat(extra.parsed));
+        if (syncPlayed(svg, boardIdx, groups, parsed, played)) shown = played;
       } else {
         clearExtras(svg);
+        clearPlayed(svg);
       }
+      hideLichessPlayed(svg, shown);
+      stack(svg);
       groups.forEach((g, i) => {
         const color = colors[i];
         if (!color) {
           if (g.hasAttribute('data-lac')) restore(g);
           return;
         }
-        // With a line picked, every other engine arrow leaves the board.
-        const hidden = !!(focus && focus.picked && i !== focus.idx);
+        // With a line picked, every other engine arrow leaves the board. So
+        // does an engine arrow for the played move, which lichess draws in
+        // place of its own when the move is one of the engine's lines: the
+        // played move's arrow stands in for it.
+        const hidden = !!(focus && focus.picked && i !== focus.idx) || isMove(parsed[i], shown);
         const stamp = [color, hidden, settings.opacity, settings.uniformWidth, settings.width, settings.border, settings.borderColor, settings.borderWidth].join(':');
         if (g.getAttribute('data-lac') === stamp) return;
         g.setAttribute('data-lac', stamp);
