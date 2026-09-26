@@ -154,29 +154,31 @@ draws it, on a live broadcast game:
 They were taken on a real lichess board with the extension installed, then
 cropped to 16:10 around the round list and the board and scaled to 640x400.
 
-The older screenshots, made by `scripts/shoot.js`, predate 1.10.0: their
-arrows are drawn over the pieces and they have no played move. The README
-still uses the 1280x800 pair.
+The others, made by `scripts/shoot.js`, show 1.11.1 with its default settings
+on the same olive board and caliente pieces. The README uses the 1280x800 set.
 
 | File | Size | Shows |
 |------|------|-------|
 | `arrows-spread-640x400.png` | 640x400 | Moves of clearly different quality, so the arrows run green to red |
 | `arrows-equal-640x400.png` | 640x400 | A position where every move is about equal, so nothing turns red |
-| `arrows-spread-1280x800.png` | 1280x800 | The same spread, with more of the page |
-| `arrows-equal-1280x800.png` | 1280x800 | The same equal position, with more of the page |
+| `played-move-640x400.png` | 640x400 | The spread position as a game in which ...Nxe4 was played: a solid black arrow in place of its engine arrow |
+| `picked-line-640x400.png` | 640x400 | The spread position with line 3 picked by its key: that line alone, numbered 1 to 5 in its own colour |
+| `*-1280x800.png` | 1280x800 | The same four, with more of the page |
 
 Don't mix sizes in one upload.
 
-Regenerate the older ones with:
+Regenerate them with:
 
 ```bash
 node scripts/shoot.js                      # 1280x800
 node scripts/shoot.js --width 640 --height 400
 ```
 
-That script launches Chrome, opens a real lichess analysis board, waits for the
-engine, and captures the page. Chrome 153 refuses to load an unpacked extension
-from the command line, so the script runs `src/logic.js` and `src/content.js` in
-the page instead. It is the same code the extension ships, with the same default
-settings, so the picture matches what an installed copy draws. The script prints
-which path it took.
+That script launches Chrome, sets lichess's olive board and caliente pieces,
+opens real lichess analysis boards, waits for the engine, presses any keys the
+shot needs, and captures the page. `--board` and `--pieces` take other lichess
+names. Chrome 153 refuses to load an unpacked extension from the command line,
+so the script runs `src/logic.js` and `src/content.js` in the page instead,
+with `src/content.css` as a stylesheet. It is the same code the extension
+ships, with the same default settings, so the picture matches what an
+installed copy draws. The script prints which path it took.

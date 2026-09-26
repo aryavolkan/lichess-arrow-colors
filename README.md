@@ -8,7 +8,8 @@ from the alternatives at a glance.
 
 Black to move. The engine's best move is green, and the arrows shade through
 yellow and orange to red as the moves get worse. The striped green arrows are
-the rest of the best line, which lichess does not draw at all.
+the rest of the best line, which lichess does not draw at all, numbered in the
+order they are played. Every arrow is drawn behind the pieces.
 
 Lichess draws the best line in pale blue and every other multi-PV line in the
 same pale grey, so with 3 to 5 lines enabled you cannot tell which grey arrow
@@ -134,6 +135,12 @@ the moves after it striped and numbered, in the line's own colour. The row is
 marked in the panel. Press the same number again, or **Escape**, to let it go,
 and the board goes back to all its arrows.
 
+![Engine line 3 picked with the 3 key, drawn on its own in orange](store/screenshots/picked-line-1280x800.png)
+
+Line 3 picked in the position from the top of this page: 4...Qe7 and the four
+moves after it, numbered 1 to 5 in the line's own orange, with its row marked
+in the panel.
+
 **Space** plays the picked line's first move, through the same code lichess
 runs when a line is clicked, so the move lands in the game exactly as a click
 would put it. With no line picked, Space is left to lichess, where it plays
@@ -160,6 +167,13 @@ so a black arrow still shows on a dark square. Lichess's faint arrow goes. If
 the played move is one of the engine's other lines, its engine arrow gives way
 to the played one too, so a white or black arrow always means the move that
 was played; how good it was is still in the panel.
+
+![The move played, 4...Nxe4, as a solid black arrow among the engine's arrows](store/screenshots/played-move-1280x800.png)
+
+The position from the top of this page, loaded as a game in which Black played
+4...Nxe4, with the engine's choice, 4...d5, as a side line. The black arrow is
+the move played. It is also the engine's fourth line, whose red arrow gives
+way to it, while 4...d5 and the rest of its line are still green and numbered.
 
 Where the engine agrees with the move that was played, its green arrow already
 says so and nothing is added. Positions where the game does not branch, and
@@ -213,8 +227,9 @@ left as lichess shows them. It can be turned off on the options page.
 4. Open any lichess analysis board, turn the engine on, and set
    **Multiple lines** to 2 or more in the engine settings (gear icon).
 
-Colours and opacity can be changed from the extension's options page
-(right-click the extension icon, then **Options**). Changes apply live.
+Colours, widths, the outline and opacity are set on the extension's options
+page (right-click the extension icon, then **Options**), where most of the
+features above can also be switched off. Changes apply live.
 
 The extension collects no data. See [PRIVACY.md](PRIVACY.md).
 
@@ -394,7 +409,16 @@ The extension collects no data. See [PRIVACY.md](PRIVACY.md).
 ```bash
 npm test          # unit tests for the pure ranking logic (node --test)
 npm run icons     # regenerate icons/*.png
+node scripts/shoot.js                           # retake the 1280x800 screenshots
+node scripts/shoot.js --width 640 --height 400  # and the 640x400 ones
 ```
 
 `src/logic.js` is dependency-free and runs both in the browser and under Node.
 `src/content.js` holds the DOM glue. Nothing needs building.
+
+The screenshots in this README come from `scripts/shoot.js`, which opens real
+lichess analysis boards in headless Chrome, waits for the engine and presses
+the keys a shot needs. It sets lichess's olive board and caliente pieces first,
+the ones the store screenshots were taken with; `--board` and `--pieces` take
+any other lichess name for either. [STORE_LISTING.md](STORE_LISTING.md) says
+which screenshots to upload.
