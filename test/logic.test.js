@@ -317,6 +317,7 @@ test('same width in, same outline out', () => {
 
 test('the default arrow is thinner than lichess\'s full-strength one', () => {
   assert.equal(DEFAULTS.uniformWidth, true);
+  assert.equal(DEFAULTS.width, 7 / 64);
   assert.ok(DEFAULTS.width < 15 / 64, 'should be thinner than lichess');
   assert.ok(DEFAULTS.width > 4 / 64, 'but still clearly visible');
 });

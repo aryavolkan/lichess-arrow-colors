@@ -59,7 +59,7 @@
     // move is, so lichess's thinning of weaker lines only adds noise.
     uniformWidth: true,
     // Thinner than lichess's full-strength arrow, which is 15 units.
-    width: 9 * CG_WIDTH_UNIT,
+    width: 7 * CG_WIDTH_UNIT,
     border: true,
     borderColor: '#000000',
     borderWidth: 0.03,
