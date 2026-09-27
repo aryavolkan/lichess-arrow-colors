@@ -422,3 +422,11 @@ the keys a shot needs. It sets lichess's olive board and caliente pieces first,
 the ones the store screenshots were taken with; `--board` and `--pieces` take
 any other lichess name for either. [STORE_LISTING.md](STORE_LISTING.md) says
 which screenshots to upload.
+
+## Related: opening study app
+
+The [`opening-study/`](opening-study/) directory holds a separate, self-hosted
+web app for exploring the opening book, drilling chosen variations and
+building an ever-deepening Stockfish analysis of every book position. It has
+its own README, tests and licence (GPL-3.0-or-later, because it bundles
+Stockfish.js and chessground); nothing in the extension depends on it.
