@@ -12,3 +12,17 @@ jobs:
         with:
           node-version: '20'
       - run: node --test test/
+  opening-study:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: opening-study
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: opening-study/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
