@@ -1,5 +1,8 @@
 # Lichess Arrow Colors
 
+[![test](https://github.com/aryavolkan/lichess-arrow-colors/actions/workflows/test.yml/badge.svg)](https://github.com/aryavolkan/lichess-arrow-colors/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A small Chrome extension (Manifest V3) that colour-codes the engine suggestion
 arrows on [lichess.org](https://lichess.org), so you can tell the best line
 from the alternatives at a glance.
